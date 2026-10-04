@@ -19,8 +19,10 @@ import {
 } from "@/lib/stand/logic";
 import { rehydrateStand, useStandStore } from "@/lib/stand/store";
 import { installOfflineCopy } from "@/lib/stand/offline";
-import { AboutSheet, BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand/forms";
+import { BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand/forms";
 import { InstallView, runningAsInstalledApp } from "@/components/stand/install-view";
+import { UpdateBanner, UpdateSheet, useUpdateStatus } from "@/components/stand/update-sheet";
+import { updateAvailable } from "@/lib/stand/updates";
 import { Choice, PressButton } from "@/components/stand/ui";
 
 const AnalyticsView = lazy(() =>
@@ -38,6 +40,8 @@ export function StandApp() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [takeId, setTakeId] = useState<string | null>(null);
+  const update = useUpdateStatus(true);
+  const behind = updateAvailable(update);
 
   useEffect(() => {
     rehydrateStand();
@@ -54,12 +58,12 @@ export function StandApp() {
     return (
       <div className="min-h-dvh bg-paper text-ink" data-app-version={APP_VERSION}>
         <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">
-          <Header onAbout={() => setAboutOpen(true)} />
+          <Header onAbout={() => setAboutOpen(true)} behind={behind} />
           <main className="flex-1 px-4 pb-10">
             <InstallView onUseHere={() => setInstalling(false)} />
           </main>
         </div>
-        <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} />
+        <UpdateSheet open={aboutOpen} onOpenChange={setAboutOpen} />
       </div>
     );
   }
@@ -67,9 +71,9 @@ export function StandApp() {
   if (!hydrated) {
     return (
       <div className="min-h-dvh bg-paper text-ink" data-app-version={APP_VERSION}>
-        <Header onAbout={() => setAboutOpen(true)} />
+        <Header onAbout={() => setAboutOpen(true)} behind={behind} />
         <p className="px-4 text-sm text-muted">Opening your stand book…</p>
-        <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} />
+        <UpdateSheet open={aboutOpen} onOpenChange={setAboutOpen} />
       </div>
     );
   }
@@ -77,8 +81,9 @@ export function StandApp() {
   return (
     <div className="min-h-dvh bg-paper text-ink" data-app-version={APP_VERSION}>
       <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">
-        <Header onAbout={() => setAboutOpen(true)} />
+        <Header onAbout={() => setAboutOpen(true)} behind={behind} />
         <main className="flex-1 px-4 pb-28">
+          <UpdateBanner result={update} onOpen={() => setAboutOpen(true)} />
           {tab === "stand" ? (
             <StandView onAdd={() => setBuyOpen(true)} onEdit={setEditId} onTake={setTakeId} />
           ) : null}
@@ -104,25 +109,30 @@ export function StandApp() {
       </nav>
       <BuySheet open={buyOpen} onOpenChange={setBuyOpen} />
       <CashSheet open={cashOpen} onOpenChange={setCashOpen} />
-      <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} />
+      <UpdateSheet open={aboutOpen} onOpenChange={setAboutOpen} />
       <EditSheet purchaseId={editId} onOpenChange={(open) => { if (!open) setEditId(null); }} />
       <TakeOffSheet purchaseId={takeId} onOpenChange={(open) => { if (!open) setTakeId(null); }} />
     </div>
   );
 }
 
-function Header({ onAbout }: { onAbout: () => void }) {
+function Header({ onAbout, behind }: { onAbout: () => void; behind: boolean }) {
   return (
     <header className="header-pad px-4 pb-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-3xl leading-none text-balance">{APP_NAME}</h1>
         <button
           type="button"
-          className="tap min-h-11 rounded-full border border-line bg-card px-3 text-sm font-medium tabular-nums"
+          className="tap relative min-h-11 rounded-full border border-line bg-card px-3 text-sm font-medium tabular-nums"
           onClick={onAbout}
-          aria-label={`Version ${APP_VERSION}. See how to check for updates.`}
+          aria-label={
+            behind
+              ? `Version ${APP_VERSION}, update available. Open updates.`
+              : `Version ${APP_VERSION}. See how to check for updates.`
+          }
         >
           v{APP_VERSION}
+          {behind ? <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-clay" aria-hidden /> : null}
         </button>
       </div>
       <p className="mt-2 text-sm text-pretty text-muted">

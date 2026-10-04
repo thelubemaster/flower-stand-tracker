@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react";
-import { APP_INSTALL_URL, APP_SOURCE_URL, APP_VERSION } from "@/lib/version";
 import { formatMoney, itemName, localDay } from "@/lib/stand/format";
 import { draftFromPurchase } from "@/lib/stand/logic";
 import type { FieldErrors } from "@/lib/stand/logic";
@@ -592,38 +591,6 @@ export function CashSheet({ open, onOpenChange }: { open: boolean; onOpenChange:
           Log this cash
         </PressButton>
       </form>
-    </Sheet>
-  );
-}
-
-export function AboutSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={onOpenChange}
-      title={`Version ${APP_VERSION}`}
-      description="This number changes with every update."
-    >
-      <div className="grid gap-3 text-sm text-pretty text-ink">
-        <p>
-          Flower Stand runs on this phone. The book is saved in the app on this device. Nothing is uploaded. There is
-          no account and no cloud copy.
-        </p>
-        <p className="text-muted">
-          Download it from GitHub, the same way as the receipt tracker.{" "}
-          <a className="underline" href={APP_INSTALL_URL}>
-            Open the install page
-          </a>
-          . Android gets the app file. iPhone uses Safari, then Add to Home Screen. It is not hosted on Grok.{" "}
-          <a className="underline" href={APP_SOURCE_URL}>
-            thelubemaster/flower-stand-tracker
-          </a>
-        </p>
-        <p className="text-muted">
-          This says {APP_VERSION}. That number changes only when a newer copy from that GitHub repo is on the phone.
-          The book itself never leaves this device. Download the record from the Record tab if you want a file of it.
-        </p>
-      </div>
     </Sheet>
   );
 }

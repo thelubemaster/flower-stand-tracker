@@ -45,6 +45,7 @@ jobs:
           cp dist/client/index.html dist/client/404.html
           test -f dist/client/.nojekyll || touch dist/client/.nojekyll
           printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"installUrl\":\"https://thelubemaster.github.io/flower-stand-tracker/?install=1\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk\"}" > dist/client/install.json
+          printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"apkVersion\":\"${{ steps.ver.outputs.version }}\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/download/v${{ steps.ver.outputs.version }}/flower-stand.apk\",\"notes\":\"Flower Stand ${{ steps.ver.outputs.version }}\"}" > dist/client/app-update.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -143,6 +144,10 @@ jobs:
           name: app-apk
           path: artifacts
 
+      - name: Write update manifest
+        run: |
+          printf '%s\n' "{\"version\":\"${{ needs.web.outputs.version }}\",\"apkVersion\":\"${{ needs.web.outputs.version }}\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/download/v${{ needs.web.outputs.version }}/flower-stand.apk\",\"notes\":\"Flower Stand ${{ needs.web.outputs.version }}\"}" > artifacts/app-update.json
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -158,7 +163,11 @@ jobs:
             | Android | Install page → download flower-stand.apk → Install |
             | iPhone / iPad | Open that link in Safari → Share → Add to Home Screen |
 
+            Already installed copies check this release and offer Get up to date.
+
             Direct Android file: [flower-stand.apk](https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk)
-          files: artifacts/flower-stand.apk
+          files: |
+            artifacts/flower-stand.apk
+            artifacts/app-update.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
