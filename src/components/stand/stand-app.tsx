@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { Banknote, ChartColumn, ScrollText, Sprout } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Banknote, ChartColumn, ScrollText, Sprout, Sunset } from "lucide-react";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
 import { formatMoney, formatStamp, itemName, localDay, reasonLabel } from "@/lib/stand/format";
 import {
@@ -17,20 +17,22 @@ import {
   unitCost,
   type LedgerFilter,
 } from "@/lib/stand/logic";
+import { backupFileName, buildBackup, parseBackup, type StandBackup } from "@/lib/stand/backup";
 import { rehydrateStand, useStandStore } from "@/lib/stand/store";
 import { installOfflineCopy } from "@/lib/stand/offline";
-import { BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand/forms";
+import { BuySheet, CashSheet, CountSheet, EditSheet, PriceSheet, TakeOffSheet } from "@/components/stand/forms";
 import { InstallView, runningAsInstalledApp } from "@/components/stand/install-view";
 import { UpdateBanner, UpdateSheet, useUpdateStatus } from "@/components/stand/update-sheet";
 import { updateAvailable } from "@/lib/stand/updates";
 import { Logo } from "@/components/stand/logo";
-import { Choice, PressButton } from "@/components/stand/ui";
+import { DayView } from "@/components/stand/day-view";
+import { Choice, PressButton, Sheet } from "@/components/stand/ui";
 
 const AnalyticsView = lazy(() =>
   import("@/components/stand/analytics-view").then((mod) => ({ default: mod.AnalyticsView })),
 );
 
-type Tab = "stand" | "cash" | "stats" | "record";
+type Tab = "stand" | "cash" | "day" | "stats" | "record";
 
 export function StandApp() {
   const hydrated = useStandStore((state) => state.hydrated);
@@ -41,6 +43,8 @@ export function StandApp() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [takeId, setTakeId] = useState<string | null>(null);
+  const [countId, setCountId] = useState<string | null>(null);
+  const [priceId, setPriceId] = useState<string | null>(null);
   const update = useUpdateStatus(true);
   const behind = updateAvailable(update);
 
@@ -86,9 +90,10 @@ export function StandApp() {
         <main className="flex-1 px-4 pb-28">
           <UpdateBanner result={update} onOpen={() => setAboutOpen(true)} />
           {tab === "stand" ? (
-            <StandView onAdd={() => setBuyOpen(true)} onEdit={setEditId} onTake={setTakeId} />
+            <StandView onAdd={() => setBuyOpen(true)} onEdit={setEditId} onTake={setTakeId} onCount={setCountId} onPrice={setPriceId} />
           ) : null}
           {tab === "cash" ? <CashView onLog={() => setCashOpen(true)} /> : null}
+          {tab === "day" ? <DayView onLog={() => setCashOpen(true)} onOtherPrice={setPriceId} /> : null}
           {tab === "stats" ? (
             <Suspense fallback={<p className="text-sm text-muted">Opening the numbers…</p>}>
               <AnalyticsView />
@@ -101,9 +106,10 @@ export function StandApp() {
         aria-label="Sections"
         className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card"
       >
-        <div className="mx-auto grid max-w-xl grid-cols-4">
+        <div className="mx-auto grid max-w-xl grid-cols-5">
           <NavButton label="Stand" icon={<Sprout className="size-5" aria-hidden />} selected={tab === "stand"} onClick={() => setTab("stand")} />
           <NavButton label="Cash" icon={<Banknote className="size-5" aria-hidden />} selected={tab === "cash"} onClick={() => setTab("cash")} />
+          <NavButton label="Day" icon={<Sunset className="size-5" aria-hidden />} selected={tab === "day"} onClick={() => setTab("day")} />
           <NavButton label="Stats" icon={<ChartColumn className="size-5" aria-hidden />} selected={tab === "stats"} onClick={() => setTab("stats")} />
           <NavButton label="Record" icon={<ScrollText className="size-5" aria-hidden />} selected={tab === "record"} onClick={() => setTab("record")} />
         </div>
@@ -113,6 +119,8 @@ export function StandApp() {
       <UpdateSheet open={aboutOpen} onOpenChange={setAboutOpen} />
       <EditSheet purchaseId={editId} onOpenChange={(open) => { if (!open) setEditId(null); }} />
       <TakeOffSheet purchaseId={takeId} onOpenChange={(open) => { if (!open) setTakeId(null); }} />
+      <CountSheet purchaseId={countId} onOpenChange={(open) => { if (!open) setCountId(null); }} />
+      <PriceSheet purchaseId={priceId} onOpenChange={(open) => { if (!open) setPriceId(null); }} />
     </div>
   );
 }
@@ -160,7 +168,7 @@ function NavButton({
   return (
     <button
       type="button"
-      className={selected ? "tap grid min-h-14 place-items-center gap-1 text-sm font-medium text-moss" : "tap grid min-h-14 place-items-center gap-1 text-sm text-muted"}
+      className={selected ? "tap grid min-h-14 place-items-center gap-0.5 px-1 text-xs font-medium text-moss" : "tap grid min-h-14 place-items-center gap-0.5 px-1 text-xs text-muted"}
       aria-current={selected ? "page" : undefined}
       onClick={onClick}
     >
@@ -174,10 +182,14 @@ function StandView({
   onAdd,
   onEdit,
   onTake,
+  onCount,
+  onPrice,
 }: {
   onAdd: () => void;
   onEdit: (id: string) => void;
   onTake: (id: string) => void;
+  onCount: (id: string) => void;
+  onPrice: (id: string) => void;
 }) {
   const purchases = useStandStore((state) => state.purchases);
   const [label, setLabel] = useState("all");
@@ -262,10 +274,20 @@ function StandView({
             </p>
             {purchase.note ? <p className="mt-2 text-sm text-pretty text-muted">{purchase.note}</p> : null}
             <div className="mt-4 grid gap-2">
-              <PressButton className="w-full" onClick={() => onTake(purchase.id)}>
-                Take off the stand
-              </PressButton>
-              <PressButton variant="quiet" className="w-full" onClick={() => onEdit(purchase.id)}>
+              {purchase.remaining > 1 ? (
+                <PressButton className="w-full" onClick={() => onCount(purchase.id)}>
+                  Update the count
+                </PressButton>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <PressButton variant={purchase.remaining > 1 ? "quiet" : "primary"} onClick={() => onTake(purchase.id)}>
+                  Take off
+                </PressButton>
+                <PressButton variant="quiet" onClick={() => onPrice(purchase.id)}>
+                  Change price
+                </PressButton>
+              </div>
+              <PressButton variant="ghost" className="w-full" onClick={() => onEdit(purchase.id)}>
                 Fix this lot
               </PressButton>
             </div>
@@ -358,11 +380,16 @@ function RecordView() {
   const purchases = useStandStore((state) => state.purchases);
   const removals = useStandStore((state) => state.removals);
   const collections = useStandStore((state) => state.collections);
+  const priceChanges = useStandStore((state) => state.priceChanges);
   const undoRemoval = useStandStore((state) => state.undoRemoval);
+  const undoPrice = useStandStore((state) => state.undoPrice);
+  const replaceBook = useStandStore((state) => state.replaceBook);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<LedgerFilter>("all");
   const [notice, setNotice] = useState<string | null>(null);
-  const rows = buildLedger(purchases, removals, collections, filter);
-  const empty = purchases.length + removals.length + collections.length === 0;
+  const [pendingBackup, setPendingBackup] = useState<StandBackup | null>(null);
+  const rows = buildLedger(purchases, removals, collections, filter, priceChanges);
+  const empty = purchases.length + removals.length + collections.length + priceChanges.length === 0;
 
   return (
     <div className="grid gap-4">
@@ -373,11 +400,57 @@ function RecordView() {
         <PressButton
           variant="quiet"
           disabled={empty}
-          onClick={() => downloadRecord(ledgerCsv(purchases, removals, collections))}
+          onClick={() => downloadRecord(ledgerCsv(purchases, removals, collections, priceChanges))}
         >
           Download record
         </PressButton>
       </div>
+      <section className="rounded-card border border-line bg-card px-4 py-4">
+        <h2 className="font-display text-2xl">Backup</h2>
+        <p className="mt-1 text-sm text-pretty text-muted">
+          Save the whole book as a file. If this phone is gone, put that file back. Nothing is uploaded.
+        </p>
+        <div className="mt-3 grid gap-2">
+          <PressButton
+            className="w-full"
+            onClick={() => {
+              const backup = buildBackup(purchases, removals, collections, priceChanges, APP_VERSION);
+              void saveBackup(backup).then((saved) => {
+                if (saved === "cancelled") return;
+                setNotice(saved === "shared" ? "Backup is ready to keep." : "Backup file saved on this phone.");
+              });
+            }}
+          >
+            Save a backup
+          </PressButton>
+          <PressButton variant="quiet" className="w-full" onClick={() => fileRef.current?.click()}>
+            Put a backup back
+          </PressButton>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                const parsed = parseBackup(String(reader.result ?? ""));
+                if (!parsed.ok) {
+                  setNotice(parsed.error);
+                  return;
+                }
+                setNotice(null);
+                setPendingBackup(parsed.backup);
+              };
+              reader.onerror = () => setNotice("Couldn't read that file.");
+              reader.readAsText(file);
+            }}
+          />
+        </div>
+      </section>
       <div className="flex flex-wrap gap-2">
         {(
           [
@@ -432,7 +505,12 @@ function RecordView() {
                 </p>
                 <p className="mt-1 font-medium break-words">{itemName(removal)}</p>
                 <p className="text-sm text-muted">
-                  {removal.quantity} {removal.reason === "ran-out" ? "sold out" : "left the stand"}
+                  {removal.quantity}{" "}
+                  {removal.reason === "ran-out"
+                    ? "sold out"
+                    : removal.reason === "counted"
+                      ? "no longer out"
+                      : "left the stand"}
                 </p>
                 {removal.note ? <p className="mt-1 text-sm text-pretty">{removal.note}</p> : null}
                 <PressButton
@@ -448,6 +526,28 @@ function RecordView() {
               </li>
             );
           }
+          if (row.type === "price") {
+            const change = row.change;
+            return (
+              <li key={row.id} className="rounded-card border border-line bg-card px-4 py-3">
+                <p className="text-sm text-muted">Price · {formatStamp(change.at)}</p>
+                <p className="mt-1 font-medium break-words">{itemName(change)}</p>
+                <p className="text-sm text-muted tabular-nums">
+                  {formatMoney(change.fromPrice)} to {formatMoney(change.toPrice)}
+                </p>
+                <PressButton
+                  variant="ghost"
+                  className="mt-2 px-0"
+                  onClick={() => {
+                    const result = undoPrice(change.id);
+                    setNotice(result.ok ? null : "error" in result ? result.error : "Couldn't put that price back.");
+                  }}
+                >
+                  Put the old price back
+                </PressButton>
+              </li>
+            );
+          }
           const collection = row.collection;
           return (
             <li key={row.id} className="rounded-card border border-line bg-card px-4 py-3">
@@ -458,6 +558,37 @@ function RecordView() {
           );
         })}
       </ul>
+      <Sheet
+        open={pendingBackup != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingBackup(null);
+        }}
+        title="Replace the book?"
+        description="This puts the backup on this phone. It does not merge with what's here."
+      >
+        {pendingBackup ? (
+          <div className="grid gap-4">
+            <p className="text-sm text-pretty text-muted">
+              This file has {pendingBackup.purchases.length} buys, {pendingBackup.collections.length} cash lines, and{" "}
+              {pendingBackup.removals.length} removals. Saved {formatStamp(pendingBackup.savedAt)}. The book on this phone
+              will be replaced.
+            </p>
+            <PressButton
+              className="w-full"
+              onClick={() => {
+                replaceBook(pendingBackup);
+                setPendingBackup(null);
+                setNotice("That backup is the book on this phone now.");
+              }}
+            >
+              Replace the book
+            </PressButton>
+            <PressButton variant="quiet" className="w-full" onClick={() => setPendingBackup(null)}>
+              Keep what's here
+            </PressButton>
+          </div>
+        ) : null}
+      </Sheet>
     </div>
   );
 }
@@ -472,4 +603,27 @@ function downloadRecord(csv: string) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function saveBackup(backup: StandBackup): Promise<"shared" | "downloaded" | "cancelled"> {
+  const text = JSON.stringify(backup, null, 2);
+  const file = new File([text], backupFileName(), { type: "application/json" });
+  if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Flower Stand backup" });
+      return "shared";
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+    }
+  }
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return "downloaded";
 }

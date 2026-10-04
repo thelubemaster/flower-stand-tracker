@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { formatMoney, itemName, localDay } from "@/lib/stand/format";
-import { draftFromPurchase } from "@/lib/stand/logic";
+import { draftFromPurchase, markdownChoices } from "@/lib/stand/logic";
 import type { FieldErrors } from "@/lib/stand/logic";
 import { useStandStore } from "@/lib/stand/store";
-import type { CashDraft, PartDraft, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
+import type { CashDraft, CountDraft, PartDraft, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
 import { Choice, Field, PressButton, Sheet, TextControl, AreaControl } from "@/components/stand/ui";
 
 function emptyPurchase(): PurchaseDraft {
@@ -642,4 +642,248 @@ function stepQuantity(current: string, delta: number, max: number): string {
   const parsed = /^\d+$/.test(current.trim()) ? Number(current) : 0;
   const next = Math.min(max, Math.max(1, parsed + delta));
   return String(next);
+}
+
+export function CountSheet({
+  purchaseId,
+  onOpenChange,
+}: {
+  purchaseId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const purchase = useStandStore((state) => state.purchases.find((row) => row.id === purchaseId));
+  const updateCount = useStandStore((state) => state.updateCount);
+  const [draft, setDraft] = useState<CountDraft>({
+    mode: "left",
+    amount: "1",
+    day: localDay(),
+    note: "",
+  });
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  useEffect(() => {
+    if (!purchase || purchase.remaining < 2) return;
+    setDraft({
+      mode: "left",
+      amount: String(purchase.remaining - 1),
+      day: localDay(),
+      note: "",
+    });
+    setErrors({});
+  }, [purchase]);
+
+  const open = purchaseId != null && purchase != null && purchase.remaining > 1;
+  const amount = /^\d+$/.test(draft.amount.trim()) ? Number(draft.amount) : null;
+  const still =
+    purchase == null || amount == null
+      ? null
+      : draft.mode === "left"
+        ? amount
+        : purchase.remaining - amount;
+  const pulled =
+    purchase == null || still == null ? null : Math.max(0, purchase.remaining - still);
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Update the count"
+      description="The rest stays on the stand. Cash still goes in the jar."
+    >
+      {purchase ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const result = updateCount(purchase.id, draft);
+            const next = failure(result);
+            if (next) {
+              setErrors(next);
+              return;
+            }
+            onOpenChange(false);
+          }}
+        >
+          <p className="text-sm text-pretty text-muted">
+            <span className="font-medium text-ink">{itemName(purchase)}</span>
+            {` · ${purchase.remaining} are out of ${purchase.quantity} bought.`}
+          </p>
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium">What are you saying</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <Choice
+                selected={draft.mode === "left"}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    mode: "left",
+                    amount: String(Math.max(1, purchase.remaining - 1)),
+                  })
+                }
+              >
+                Still out
+              </Choice>
+              <Choice
+                selected={draft.mode === "pulled"}
+                onClick={() => setDraft({ ...draft, mode: "pulled", amount: "1" })}
+              >
+                I pulled
+              </Choice>
+            </div>
+          </fieldset>
+          <Field
+            label={draft.mode === "left" ? "How many are still out" : "How many you pulled"}
+            error={errors.amount}
+          >
+            <div className="flex items-center gap-2">
+              <PressButton
+                variant="quiet"
+                className="size-12 px-0"
+                aria-label="Fewer"
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    amount: stepQuantity(draft.amount, -1, purchase.remaining - 1),
+                  })
+                }
+              >
+                <Minus className="size-5" aria-hidden />
+              </PressButton>
+              <TextControl
+                className="text-center tabular-nums"
+                inputMode="numeric"
+                value={draft.amount}
+                onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+              />
+              <PressButton
+                variant="quiet"
+                className="size-12 px-0"
+                aria-label="More"
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    amount: stepQuantity(draft.amount, 1, purchase.remaining - 1),
+                  })
+                }
+              >
+                <Plus className="size-5" aria-hidden />
+              </PressButton>
+            </div>
+          </Field>
+          <p className="text-sm text-pretty text-muted">
+            {still == null || pulled == null || still < 1 || pulled < 1
+              ? "The lot stays up. Take it off only when the rest is gone."
+              : `${still} stay out. ${pulled} leave the count. The lot stays on the stand.`}
+          </p>
+          <Field label="Day" error={errors.day}>
+            <TextControl
+              type="date"
+              value={draft.day}
+              max={localDay()}
+              onChange={(event) => setDraft({ ...draft, day: event.target.value })}
+            />
+          </Field>
+          <Field label="Note" error={errors.note}>
+            <AreaControl
+              value={draft.note}
+              onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+              placeholder="Optional."
+            />
+          </Field>
+          {errors.form ? (
+            <p className="text-sm text-clay" role="alert">
+              {errors.form}
+            </p>
+          ) : null}
+          <PressButton type="submit" className="w-full">
+            Update the count
+          </PressButton>
+        </form>
+      ) : null}
+    </Sheet>
+  );
+}
+
+export function PriceSheet({
+  purchaseId,
+  onOpenChange,
+}: {
+  purchaseId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const purchase = useStandStore((state) => state.purchases.find((row) => row.id === purchaseId));
+  const setPrice = useStandStore((state) => state.setPrice);
+  const [price, setPriceText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!purchase) return;
+    const choices = markdownChoices(purchase.sellPrice);
+    setPriceText(choices[0] != null ? choices[0].toFixed(2) : "");
+    setError(null);
+  }, [purchase]);
+
+  const open = purchaseId != null && purchase != null && purchase.remaining > 0;
+  const choices = purchase ? markdownChoices(purchase.sellPrice) : [];
+
+  function apply(next: number) {
+    if (!purchase) return;
+    const result = setPrice(purchase.id, next);
+    if (!result.ok) {
+      setError("errors" in result && result.errors?.price ? result.errors.price : "error" in result ? result.error : "Couldn't change the price.");
+      return;
+    }
+    onOpenChange(false);
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Change the price"
+      description="The old price stays in the record."
+    >
+      {purchase ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const cleaned = price.trim().replace(/[$,\s]/g, "");
+            if (!/^\d+(\.\d{0,2})?$/.test(cleaned)) {
+              setError("Enter the new price, like 3 or 3.50.");
+              return;
+            }
+            apply(Number(cleaned));
+          }}
+        >
+          <p className="text-sm text-pretty text-muted">
+            <span className="font-medium text-ink">{itemName(purchase)}</span>
+            {` is ${formatMoney(purchase.sellPrice)} now.`}
+          </p>
+          {choices.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2">
+              {choices.map((choice) => (
+                <PressButton key={choice} variant="quiet" onClick={() => apply(choice)}>
+                  {formatMoney(choice)}
+                </PressButton>
+              ))}
+            </div>
+          ) : null}
+          <Field label="New price" error={error ?? undefined}>
+            <TextControl
+              inputMode="decimal"
+              value={price}
+              onChange={(event) => {
+                setPriceText(event.target.value);
+                setError(null);
+              }}
+            />
+          </Field>
+          <PressButton type="submit" className="w-full">
+            Set this price
+          </PressButton>
+        </form>
+      ) : null}
+    </Sheet>
+  );
 }

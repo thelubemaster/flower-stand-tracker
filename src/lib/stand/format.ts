@@ -40,5 +40,6 @@ export function itemName(row: { name: string; detail: string }): string {
 export function reasonLabel(reason: RemovalReason): string {
   if (reason === "ran-out") return "Sold out";
   if (reason === "tossed") return "Tossed";
+  if (reason === "counted") return "Counted off";
   return "Dead";
 }

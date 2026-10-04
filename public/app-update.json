@@ -1,6 +1,6 @@
 {
-  "version": "1.6.1",
-  "apkVersion": "1.6.1",
-  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.6.1/flower-stand.apk",
-  "notes": "Cute flower-in-a-pot logo. The book stays on the phone."
+  "version": "1.7.0",
+  "apkVersion": "1.7.0",
+  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.7.0/flower-stand.apk",
+  "notes": "Backup the book, update the count while a lot stays out, and mark prices down from the Day screen."
 }

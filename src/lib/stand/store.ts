@@ -4,12 +4,15 @@ import {
   collectionFromDraft,
   purchasesFromDraft,
   closeLotFromDraft,
+  countFromDraft,
+  priceChangeFromAmount,
   restoreRemoval,
   revisePurchase,
   upgradePurchase,
   upgradeRemoval,
 } from "@/lib/stand/logic";
-import type { CashDraft, Collection, Purchase, PurchaseDraft, Removal, TakeOffDraft } from "@/lib/stand/types";
+import type { StandBackup } from "@/lib/stand/backup";
+import type { CashDraft, Collection, CountDraft, PriceChange, Purchase, PurchaseDraft, Removal, TakeOffDraft } from "@/lib/stand/types";
 import type { FieldErrors } from "@/lib/stand/logic";
 
 type Result = { ok: true } | { ok: false; errors: FieldErrors } | { ok: false; error: string };
@@ -18,15 +21,20 @@ type StandState = {
   purchases: Purchase[];
   removals: Removal[];
   collections: Collection[];
+  priceChanges: PriceChange[];
   hydrated: boolean;
   setHydrated: (hydrated: boolean) => void;
   addPurchase: (draft: PurchaseDraft) => Result;
   updatePurchase: (id: string, draft: PurchaseDraft) => Result;
   deletePurchase: (id: string) => Result;
   takeOff: (purchaseId: string, draft: TakeOffDraft) => Result;
+  updateCount: (purchaseId: string, draft: CountDraft) => Result;
+  setPrice: (purchaseId: string, price: number) => Result;
   undoRemoval: (removalId: string) => Result;
+  undoPrice: (changeId: string) => Result;
   logCollection: (draft: CashDraft) => Result;
   deleteCollection: (id: string) => Result;
+  replaceBook: (backup: StandBackup) => Result;
 };
 
 function newId(): string {
@@ -39,6 +47,7 @@ export const useStandStore = create<StandState>()(
       purchases: [],
       removals: [],
       collections: [],
+      priceChanges: [],
       hydrated: false,
       setHydrated: (hydrated) => set({ hydrated }),
       addPurchase: (draft) => {
@@ -72,7 +81,10 @@ export const useStandStore = create<StandState>()(
         }
         const exists = get().purchases.some((purchase) => purchase.id === id);
         if (!exists) return { ok: false, error: "That lot is no longer in the book." };
-        set({ purchases: get().purchases.filter((purchase) => purchase.id !== id) });
+        set({
+          purchases: get().purchases.filter((purchase) => purchase.id !== id),
+          priceChanges: get().priceChanges.filter((change) => change.purchaseId !== id),
+        });
         return { ok: true };
       },
       takeOff: (purchaseId, draft) => {
@@ -83,6 +95,28 @@ export const useStandStore = create<StandState>()(
         set({
           purchases: get().purchases.map((purchase) => (purchase.id === purchaseId ? built.purchase : purchase)),
           removals: [...built.removals, ...get().removals],
+        });
+        return { ok: true };
+      },
+      updateCount: (purchaseId, draft) => {
+        const current = get().purchases.find((purchase) => purchase.id === purchaseId);
+        if (!current) return { ok: false, error: "That lot is no longer on the stand." };
+        const built = countFromDraft(current, draft, newId());
+        if (!built.ok) return built;
+        set({
+          purchases: get().purchases.map((purchase) => (purchase.id === purchaseId ? built.purchase : purchase)),
+          removals: [built.removal, ...get().removals],
+        });
+        return { ok: true };
+      },
+      setPrice: (purchaseId, price) => {
+        const current = get().purchases.find((purchase) => purchase.id === purchaseId);
+        if (!current) return { ok: false, error: "That lot is no longer in the book." };
+        const built = priceChangeFromAmount(current, price, newId());
+        if (!built.ok) return built;
+        set({
+          purchases: get().purchases.map((purchase) => (purchase.id === purchaseId ? built.purchase : purchase)),
+          priceChanges: [built.change, ...get().priceChanges],
         });
         return { ok: true };
       },
@@ -101,6 +135,29 @@ export const useStandStore = create<StandState>()(
         });
         return { ok: true };
       },
+      undoPrice: (changeId) => {
+        const change = get().priceChanges.find((row) => row.id === changeId);
+        if (!change) return { ok: false, error: "That price change is already gone." };
+        const later = get().priceChanges.some(
+          (row) =>
+            row.purchaseId === change.purchaseId &&
+            row.id !== change.id &&
+            (row.at > change.at || (row.at === change.at && row.id > change.id)),
+        );
+        if (later) return { ok: false, error: "A later price change is still in the book. Undo that one first." };
+        const current = get().purchases.find((purchase) => purchase.id === change.purchaseId);
+        if (!current) return { ok: false, error: "The lot for that price is missing." };
+        if (current.sellPrice !== change.toPrice) {
+          return { ok: false, error: "The sign price doesn't match this change anymore." };
+        }
+        set({
+          purchases: get().purchases.map((purchase) =>
+            purchase.id === current.id ? { ...purchase, sellPrice: change.fromPrice } : purchase,
+          ),
+          priceChanges: get().priceChanges.filter((row) => row.id !== changeId),
+        });
+        return { ok: true };
+      },
       logCollection: (draft) => {
         const built = collectionFromDraft(draft, newId());
         if (!built.ok) return built;
@@ -113,27 +170,39 @@ export const useStandStore = create<StandState>()(
         set({ collections: get().collections.filter((collection) => collection.id !== id) });
         return { ok: true };
       },
+      replaceBook: (backup) => {
+        set({
+          purchases: backup.purchases,
+          removals: backup.removals,
+          collections: backup.collections,
+          priceChanges: backup.priceChanges,
+        });
+        return { ok: true };
+      },
     }),
     {
       name: "flower-stand-ledger-v1",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({
         purchases: state.purchases,
         removals: state.removals,
         collections: state.collections,
+        priceChanges: state.priceChanges,
       }),
       migrate: (persisted) => {
         const data = (persisted ?? {}) as {
           purchases?: unknown[];
           removals?: unknown[];
           collections?: Collection[];
+          priceChanges?: PriceChange[];
         };
         return {
           purchases: (data.purchases ?? []).map(upgradePurchase),
           removals: (data.removals ?? []).map(upgradeRemoval),
           collections: data.collections ?? [],
+          priceChanges: Array.isArray(data.priceChanges) ? data.priceChanges : [],
         };
       },
       onRehydrateStorage: () => () => {

@@ -42,6 +42,7 @@ export type Analytics = {
   ranOut: number;
   tossed: number;
   dead: number;
+  counted: number;
   wasteCost: number;
   lots: LotRoom[];
 };
@@ -200,6 +201,7 @@ export function buildAnalytics(
   let ranOut = 0;
   let tossed = 0;
   let dead = 0;
+  let counted = 0;
   let wasteCost = 0;
   for (const removal of removals) {
     const day = stampDay(removal.at);
@@ -207,6 +209,7 @@ export function buildAnalytics(
     if (removal.reason === "ran-out") ranOut += removal.quantity;
     if (removal.reason === "tossed") tossed += removal.quantity;
     if (removal.reason === "dead") dead += removal.quantity;
+    if (removal.reason === "counted") counted += removal.quantity;
     if (removal.reason === "tossed" || removal.reason === "dead") {
       const purchase = purchaseById.get(removal.purchaseId);
       if (purchase) wasteCost += removal.quantity * unitCost(purchase);
@@ -244,6 +247,7 @@ export function buildAnalytics(
     ranOut,
     tossed,
     dead,
+    counted,
     wasteCost: roundMoney(wasteCost),
     lots,
   };

@@ -1,5 +1,5 @@
 /** Bump this on every update the stand should be able to see. Keep public/sw.js and public/app-update.json in sync. */
-export const APP_VERSION = "1.6.1";
+export const APP_VERSION = "1.7.0";
 
 export const APP_NAME = "Flower Stand";
 
@@ -39,6 +39,16 @@ export type ChangelogEntry = {
 
 /** Newest first. Shown in the update sheet. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.7.0",
+    date: "2026-10-03",
+    title: "A backup, a live count, and dusk prices",
+    changes: [
+      "Save the whole book as a file and put it back on a phone",
+      "Update how many are still out without taking the lot off",
+      "Day screen shows the jar, what came off, and one-tap markdowns",
+    ],
+  },
   {
     version: "1.6.1",
     date: "2026-10-03",

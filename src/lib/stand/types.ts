@@ -1,4 +1,4 @@
-export type RemovalReason = "ran-out" | "tossed" | "dead";
+export type RemovalReason = "ran-out" | "tossed" | "dead" | "counted";
 
 export type PartDraft = {
   detail: string;
@@ -63,4 +63,22 @@ export type TakeOffDraft = {
   leftoverReason: "tossed" | "dead";
   day: string;
   note: string;
+};
+
+export type CountDraft = {
+  mode: "left" | "pulled";
+  amount: string;
+  day: string;
+  note: string;
+};
+
+export type PriceChange = {
+  id: string;
+  purchaseId: string;
+  name: string;
+  label: string;
+  detail: string;
+  fromPrice: number;
+  toPrice: number;
+  at: string;
 };

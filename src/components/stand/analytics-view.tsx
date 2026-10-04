@@ -111,6 +111,9 @@ function AnalyticsBody({ stats }: { stats: Analytics }) {
           {stats.tossed + stats.dead === 0
             ? "Nothing was marked tossed or dead in this stretch."
             : `About ${formatMoney(stats.wasteCost)} of what you paid left as tossed or dead.`}
+          {stats.counted > 0
+            ? ` ${stats.counted} counted off while the lot stayed on the stand.`
+            : ""}
         </p>
       </section>
       {stats.lots.length > 0 ? (
