@@ -1,6 +1,6 @@
 # Flower Stand
 
-Version 1.9.0.
+Version 1.9.1.
 
 The stand book stays on the phone. Nothing is uploaded.
 

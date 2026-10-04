@@ -18,6 +18,7 @@ import {
   type LedgerFilter,
 } from "@/lib/stand/logic";
 import { backupFileName, buildBackup, parseBackup, type StandBackup } from "@/lib/stand/backup";
+import { isSampleStand, SAMPLE_BACKUP } from "@/lib/stand/sample";
 import { rehydrateStand, useStandStore } from "@/lib/stand/store";
 import { installOfflineCopy } from "@/lib/stand/offline";
 import { BuySheet, CashSheet, CountSheet, EditSheet, PriceSheet, TakeOffSheet } from "@/components/stand/forms";
@@ -204,8 +205,11 @@ function StandView({
   onPrice: (id: string) => void;
 }) {
   const purchases = useStandStore((state) => state.purchases);
+  const removals = useStandStore((state) => state.removals);
+  const collections = useStandStore((state) => state.collections);
   const priceChanges = useStandStore((state) => state.priceChanges);
   const [label, setLabel] = useState("all");
+  const sample = isSampleStand(purchases, removals, collections, priceChanges);
   const active = activePurchases(purchases);
   const labels = [...new Set(active.map((purchase) => purchase.label))].sort((a, b) => a.localeCompare(b));
   const shown = label === "all" ? active : active.filter((purchase) => purchase.label === label);
@@ -230,6 +234,16 @@ function StandView({
       <PressButton className="w-full" onClick={onAdd}>
         Add stock
       </PressButton>
+      {sample ? (
+        <section className="rounded-card border border-line bg-card px-4 py-4">
+          <p className="text-sm text-pretty text-muted">
+            This is a sample stand, so you can tap around. It is not your real stand.
+          </p>
+          <div className="mt-3">
+            <SampleStandActions />
+          </div>
+        </section>
+      ) : null}
       {active.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           <Choice selected={label === "all"} onClick={() => setLabel("all")}>
@@ -251,6 +265,9 @@ function StandView({
           <p className="mt-2 text-sm text-pretty text-muted">
             Add whatever you're selling. Name it, then break one buy into colors if you need to.
           </p>
+          <div className="mt-4 text-left">
+            <SampleStandActions />
+          </div>
         </section>
       ) : null}
       {active.length > 0 && shown.length === 0 ? (
@@ -401,6 +418,95 @@ function CashView({ onLog }: { onLog: () => void }) {
   );
 }
 
+function SampleStandActions() {
+  const purchases = useStandStore((state) => state.purchases);
+  const removals = useStandStore((state) => state.removals);
+  const collections = useStandStore((state) => state.collections);
+  const priceChanges = useStandStore((state) => state.priceChanges);
+  const replaceBook = useStandStore((state) => state.replaceBook);
+  const [mode, setMode] = useState<"load" | "clear" | null>(null);
+  const sample = isSampleStand(purchases, removals, collections, priceChanges);
+  const empty = purchases.length + removals.length + collections.length + priceChanges.length === 0;
+
+  return (
+    <>
+      {sample ? (
+        <PressButton variant="quiet" className="w-full" onClick={() => setMode("clear")}>
+          Take the sample off
+        </PressButton>
+      ) : (
+        <PressButton variant="quiet" className="w-full" onClick={() => setMode("load")}>
+          Show a sample stand
+        </PressButton>
+      )}
+      <Sheet
+        open={mode != null}
+        onOpenChange={(open) => {
+          if (!open) setMode(null);
+        }}
+        title={mode === "clear" ? "Take the sample off?" : "Show a sample stand?"}
+        description={
+          mode === "clear"
+            ? "This clears the example. It does not download anything."
+            : "Flowers, pumpkins, cash, and price drops are already in the app."
+        }
+      >
+        {mode === "load" ? (
+          <div className="grid gap-4">
+            <p className="text-sm text-pretty text-muted">
+              {empty
+                ? "This phone is empty, so this only adds the sample. You can take it off later."
+                : "This replaces what is already saved on this phone. Save a backup first if that is your real stand."}
+            </p>
+            <PressButton
+              className="w-full"
+              onClick={() => {
+                replaceBook(structuredClone(SAMPLE_BACKUP));
+                setMode(null);
+              }}
+            >
+              Show the sample
+            </PressButton>
+            <PressButton variant="quiet" className="w-full" onClick={() => setMode(null)}>
+              Keep what's here
+            </PressButton>
+          </div>
+        ) : null}
+        {mode === "clear" ? (
+          <div className="grid gap-4">
+            <p className="text-sm text-pretty text-muted">The sample comes off this phone. Your own stand was not in it.</p>
+            <PressButton
+              className="w-full"
+              onClick={() => {
+                replaceBook(emptyBackup());
+                setMode(null);
+              }}
+            >
+              Take it off
+            </PressButton>
+            <PressButton variant="quiet" className="w-full" onClick={() => setMode(null)}>
+              Leave the sample
+            </PressButton>
+          </div>
+        ) : null}
+      </Sheet>
+    </>
+  );
+}
+
+function emptyBackup(): StandBackup {
+  return {
+    kind: "flower-stand-backup",
+    version: 1,
+    savedAt: new Date().toISOString(),
+    appVersion: APP_VERSION,
+    purchases: [],
+    removals: [],
+    collections: [],
+    priceChanges: [],
+  };
+}
+
 function RecordView() {
   const purchases = useStandStore((state) => state.purchases);
   const removals = useStandStore((state) => state.removals);
@@ -451,6 +557,7 @@ function RecordView() {
           <PressButton variant="quiet" className="w-full" onClick={() => fileRef.current?.click()}>
             Put a backup back
           </PressButton>
+          <SampleStandActions />
           <input
             ref={fileRef}
             type="file"

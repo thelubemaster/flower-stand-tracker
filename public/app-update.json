@@ -1,6 +1,6 @@
 {
-  "version": "1.9.0",
-  "apkVersion": "1.9.0",
-  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.9.0/flower-stand.apk",
-  "notes": "Get up to date refreshes the app already on the phone."
+  "version": "1.9.1",
+  "apkVersion": "1.9.1",
+  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.9.1/flower-stand.apk",
+  "notes": "Show a sample stand is already in the app. Nothing to download."
 }
