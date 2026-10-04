@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
-  "apkVersion": "1.8.0",
-  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.8.0/flower-stand.apk",
-  "notes": "Markdowns keep the item, the old price, when, and whether it was too high or the season is ending."
+  "version": "1.9.0",
+  "apkVersion": "1.9.0",
+  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.9.0/flower-stand.apk",
+  "notes": "Get up to date refreshes the app already on the phone."
 }

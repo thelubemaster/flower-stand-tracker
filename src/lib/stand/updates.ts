@@ -3,10 +3,10 @@
  * The stand book never leaves the phone. This only asks GitHub which copy is published.
  */
 import { compareVersions } from "@/lib/stand/semver";
+import { installApkInsideApp, isNativeAndroidApp } from "@/lib/stand/apk-install";
 import {
   APP_APK_NAME,
   APP_APK_URL,
-  APP_INSTALL_URL,
   APP_VERSION,
   CHANGELOG,
   GITHUB_PAGES_BASE,
@@ -148,35 +148,30 @@ export function stepsFor(result: UpdateCheckResult | null): string[] {
   if (!result) return ["Look up the latest copy on GitHub."];
   if (result.status === "available") {
     return [
-      `Get v${result.manifest.version} from GitHub.`,
-      isAndroid()
-        ? `Open ${APP_APK_NAME}, then tap Install. The book stays on the phone.`
-        : "iPhone reloads the home-screen copy. The book stays on the phone.",
+      "Get up to date refreshes the Flower Stand already on this phone.",
+      "It does not open the download page. The book stays here.",
     ];
   }
   if (result.status === "error") return ["Try again when this phone has a signal."];
   return ["Nothing to install. The book on this phone is already the published copy, or newer."];
 }
 
-function isAndroid(): boolean {
-  return typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+/** The old button sent people to ?install=1&fresh=. That visit is an update, not a new download. */
+export function isUpdateArrival(search: string): boolean {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return params.has("fresh") || params.has("updated");
 }
 
-function onGitHubPages(): boolean {
-  return typeof location !== "undefined" && location.hostname === "thelubemaster.github.io";
+/** Reload this app. Never the install page. */
+export function inPlaceUpdateUrl(currentHref: string, now = Date.now()): string {
+  const url = new URL(currentHref);
+  url.searchParams.delete("install");
+  url.searchParams.delete("fresh");
+  url.searchParams.set("updated", String(now));
+  return url.toString();
 }
 
-function startApkDownload(url: string) {
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = APP_APK_NAME;
-  link.rel = "noopener";
-  document.body.append(link);
-  link.click();
-  link.remove();
-}
-
-async function reloadPublishedCopy(): Promise<void> {
+async function clearInstalledCopy(): Promise<void> {
   if ("serviceWorker" in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(registrations.map((registration) => registration.unregister()));
@@ -185,24 +180,29 @@ async function reloadPublishedCopy(): Promise<void> {
     const keys = await caches.keys();
     await Promise.all(keys.map((key) => caches.delete(key)));
   }
-  const next = new URL(APP_INSTALL_URL);
-  next.searchParams.set("fresh", String(Date.now()));
-  window.location.replace(next.toString());
 }
 
-/** Install the published GitHub copy. Does not upload the stand book. */
-export async function applyPublishedUpdate(result: UpdateCheckResult): Promise<string> {
+function publishedAppHref(): string {
+  if (typeof location !== "undefined" && location.hostname === "thelubemaster.github.io") {
+    return new URL(location.href).toString();
+  }
+  return `${GITHUB_PAGES_BASE}/`;
+}
+
+/** Install the published GitHub copy without leaving the app. The book is not uploaded. */
+export async function applyPublishedUpdate(
+  result: UpdateCheckResult,
+  onProgress?: (message: string) => void,
+): Promise<string> {
   if (result.status !== "available") return summaryFor(result);
   const version = result.manifest.version;
-  const apkUrl = result.manifest.apkUrl || githubApkForTag(version) || APP_APK_URL;
-  if (isAndroid()) {
-    startApkDownload(apkUrl);
-    return `Download started for v${version}. Open ${APP_APK_NAME}, then tap Install.`;
+  if (isNativeAndroidApp()) {
+    const apkUrl = result.manifest.apkUrl || githubApkForTag(version) || APP_APK_URL;
+    return installApkInsideApp(apkUrl, onProgress);
   }
-  if (onGitHubPages()) {
-    await reloadPublishedCopy();
-    return `Reloading v${version} from GitHub…`;
-  }
-  window.location.assign(APP_INSTALL_URL);
-  return "Opening the GitHub install page.";
+  onProgress?.(`Refreshing v${version} on this phone…`);
+  await clearInstalledCopy();
+  const next = inPlaceUpdateUrl(publishedAppHref());
+  window.location.replace(next);
+  return `Refreshing v${version}. The book stays on this phone.`;
 }

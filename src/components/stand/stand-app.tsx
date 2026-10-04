@@ -23,7 +23,7 @@ import { installOfflineCopy } from "@/lib/stand/offline";
 import { BuySheet, CashSheet, CountSheet, EditSheet, PriceSheet, TakeOffSheet } from "@/components/stand/forms";
 import { InstallView, runningAsInstalledApp } from "@/components/stand/install-view";
 import { UpdateBanner, UpdateSheet, useUpdateStatus } from "@/components/stand/update-sheet";
-import { updateAvailable } from "@/lib/stand/updates";
+import { isUpdateArrival, updateAvailable } from "@/lib/stand/updates";
 import { Logo } from "@/components/stand/logo";
 import { DayView } from "@/components/stand/day-view";
 import { Choice, PressButton, Sheet } from "@/components/stand/ui";
@@ -54,7 +54,15 @@ export function StandApp() {
     const params = new URLSearchParams(window.location.search);
     const hashQuery = window.location.hash.includes("?") ? window.location.hash.slice(window.location.hash.indexOf("?") + 1) : "";
     const hashParams = new URLSearchParams(hashQuery);
-    if ((params.get("install") === "1" || hashParams.get("install") === "1") && !runningAsInstalledApp()) {
+    const updateArrival = isUpdateArrival(window.location.search) || isUpdateArrival(hashQuery ? `?${hashQuery}` : "");
+    if (updateArrival) {
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("install");
+      clean.searchParams.delete("fresh");
+      clean.searchParams.delete("updated");
+      const hash = clean.hash.includes("?") ? clean.hash.slice(0, clean.hash.indexOf("?")) : clean.hash;
+      window.history.replaceState(null, "", `${clean.pathname}${clean.search}${hash}`);
+    } else if ((params.get("install") === "1" || hashParams.get("install") === "1") && !runningAsInstalledApp()) {
       setInstalling(true);
     }
   }, []);

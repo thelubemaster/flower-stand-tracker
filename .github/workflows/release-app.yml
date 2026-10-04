@@ -94,6 +94,7 @@ jobs:
           set -euo pipefail
           npx cap add android
           npx cap sync android
+          node scripts/patch-android-updater.mjs
           cp -a android-icons/. android/app/src/main/res/
           if [ -n "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}" ]; then
             printf 'sdk.dir=%s\n' "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > android/local.properties

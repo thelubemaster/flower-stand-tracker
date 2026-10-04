@@ -1,5 +1,5 @@
 /** Bump this on every update the stand should be able to see. Keep public/sw.js and public/app-update.json in sync. */
-export const APP_VERSION = "1.8.0";
+export const APP_VERSION = "1.9.0";
 
 export const APP_NAME = "Flower Stand";
 
@@ -39,6 +39,16 @@ export type ChangelogEntry = {
 
 /** Newest first. Shown in the update sheet. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.9.0",
+    date: "2026-10-03",
+    title: "Get up to date stays in the app",
+    changes: [
+      "The button refreshes the Flower Stand already on this phone",
+      "It does not send you to download the app again",
+      "Android installs the next copy from inside the app",
+    ],
+  },
   {
     version: "1.8.0",
     date: "2026-10-03",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBackup, parseBackup } from "./backup.ts";
 import { countFromDraft, markdownChoices, priceChangeFromAmount } from "./logic.ts";
+import { inPlaceUpdateUrl, isUpdateArrival } from "./updates.ts";
 import type { Purchase } from "./types.ts";
 
 const mum: Purchase = {
@@ -54,6 +55,16 @@ test("backup round trip keeps the book", () => {
   assert.equal(parsed.backup.purchases[0].remaining, 3);
   assert.equal(parsed.backup.purchases[0].sellPrice, 3);
   assert.equal(parsed.backup.removals[0].reason, "counted");
+});
+
+test("an update refreshes this app instead of the download page", () => {
+  const landed = "https://thelubemaster.github.io/flower-stand-tracker/?install=1&fresh=99";
+  assert.equal(isUpdateArrival("?install=1&fresh=99"), true);
+  const next = inPlaceUpdateUrl(landed, 5);
+  assert.equal(next.includes("install=1"), false);
+  assert.equal(next.includes("fresh="), false);
+  assert.equal(next.includes("updated=5"), true);
+  assert.equal(next.startsWith("https://thelubemaster.github.io/flower-stand-tracker/"), true);
 });
 
 test("a spreadsheet is not a backup", () => {

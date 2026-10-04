@@ -116,7 +116,7 @@ export function UpdateSheet({ open, onOpenChange }: { open: boolean; onOpenChang
             setBusy(true);
             const job =
               result.status === "available"
-                ? applyPublishedUpdate(result)
+                ? applyPublishedUpdate(result, (message) => setStatus(message))
                 : checkForUpdate(true).then((next) => {
                     setResult(next);
                     return summaryFor(next);
