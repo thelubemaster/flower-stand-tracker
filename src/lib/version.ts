@@ -14,8 +14,7 @@ export const APP_INSTALL_URL = "https://thelubemaster.github.io/flower-stand-tra
 
 export const GITHUB_PAGES_BASE = "https://thelubemaster.github.io/flower-stand-tracker";
 
-export const APP_APK_URL =
-  "https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk";
+export const APP_APK_URL = "https://thelubemaster.github.io/flower-stand-tracker/flower-stand.apk";
 
 export const APP_APK_NAME = "flower-stand.apk";
 

@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           cp dist/client/index.html dist/client/404.html
           test -f dist/client/.nojekyll || touch dist/client/.nojekyll
-          printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"installUrl\":\"https://thelubemaster.github.io/flower-stand-tracker/?install=1\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk\"}" > dist/client/install.json
+          printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"installUrl\":\"https://thelubemaster.github.io/flower-stand-tracker/?install=1\",\"apkUrl\":\"https://thelubemaster.github.io/flower-stand-tracker/flower-stand.apk\"}" > dist/client/install.json
           printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"apkVersion\":\"${{ steps.ver.outputs.version }}\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/download/v${{ steps.ver.outputs.version }}/flower-stand.apk\",\"notes\":\"Flower Stand ${{ steps.ver.outputs.version }}\"}" > dist/client/app-update.json
 
       - uses: actions/upload-artifact@v4
@@ -115,8 +115,8 @@ jobs:
   # GitHub Pages for this repo is published from the gh-pages branch.
   # Actions cannot switch that setting, so each release updates the branch.
   pages:
-    needs: web
-    if: ${{ always() && needs.web.result == 'success' }}
+    needs: [web, apk]
+    if: ${{ always() && needs.web.result == 'success' && needs.apk.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -124,9 +124,16 @@ jobs:
           name: app-dist
           path: site
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-apk
+          path: apk
+
       - name: Publish install page
         run: |
           set -euo pipefail
+          test -f apk/flower-stand.apk
+          cp apk/flower-stand.apk site/flower-stand.apk
           cd site
           git init -b gh-pages
           git add -A
