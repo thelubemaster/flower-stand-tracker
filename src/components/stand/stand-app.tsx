@@ -23,6 +23,7 @@ import { BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand
 import { InstallView, runningAsInstalledApp } from "@/components/stand/install-view";
 import { UpdateBanner, UpdateSheet, useUpdateStatus } from "@/components/stand/update-sheet";
 import { updateAvailable } from "@/lib/stand/updates";
+import { Logo } from "@/components/stand/logo";
 import { Choice, PressButton } from "@/components/stand/ui";
 
 const AnalyticsView = lazy(() =>
@@ -120,7 +121,10 @@ function Header({ onAbout, behind }: { onAbout: () => void; behind: boolean }) {
   return (
     <header className="header-pad px-4 pb-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-3xl leading-none text-balance">{APP_NAME}</h1>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Logo className="size-11 shrink-0" />
+          <h1 className="font-display text-3xl leading-none text-balance">{APP_NAME}</h1>
+        </div>
         <button
           type="button"
           className="tap relative min-h-11 rounded-full border border-line bg-card px-3 text-sm font-medium tabular-nums"
