@@ -1,0 +1,10 @@
+{
+  "version": "1.5.0",
+  "name": "Flower Stand",
+  "installUrl": "https://thelubemaster.github.io/flower-stand-tracker/?install=1",
+  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk",
+  "apkFileName": "flower-stand.apk",
+  "releasesUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/latest",
+  "repoUrl": "https://github.com/thelubemaster/flower-stand-tracker",
+  "notes": "One install link. Android downloads flower-stand.apk. iPhone and iPad use Safari, then Add to Home Screen."
+}

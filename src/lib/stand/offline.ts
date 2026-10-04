@@ -4,7 +4,7 @@ function localUrl(name: string): string | null {
   try {
     const url = new URL(name);
     if (url.origin !== window.location.origin) return null;
-    if (url.pathname === "/sw.js" || url.pathname.startsWith("/api/")) return null;
+    if (url.pathname.endsWith("/sw.js") || url.pathname.includes("/api/")) return null;
     if (
       url.pathname.startsWith("/src/") ||
       url.pathname.startsWith("/@") ||
@@ -21,7 +21,8 @@ function localUrl(name: string): string | null {
 async function warmCache(): Promise<void> {
   if (!("caches" in window)) return;
   const cache = await caches.open(LOCAL_CACHE);
-  const urls = new Set<string>(["/", "/favicon.svg"]);
+  const base = import.meta.env.BASE_URL;
+  const urls = new Set<string>([base, `${base}favicon.svg`, `${base}manifest.webmanifest`]);
   for (const entry of performance.getEntriesByType("resource")) {
     const url = localUrl(entry.name);
     if (url) urls.add(url);
@@ -42,6 +43,6 @@ async function warmCache(): Promise<void> {
 export function installOfflineCopy(): void {
   if (!import.meta.env.PROD) return;
   if (!("serviceWorker" in navigator)) return;
-  void navigator.serviceWorker.register("/sw.js");
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
   void warmCache();
 }

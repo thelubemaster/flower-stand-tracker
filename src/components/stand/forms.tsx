@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react";
-import { APP_SOURCE_URL, APP_VERSION } from "@/lib/version";
+import { APP_INSTALL_URL, APP_SOURCE_URL, APP_VERSION } from "@/lib/version";
 import { formatMoney, itemName, localDay } from "@/lib/stand/format";
 import { draftFromPurchase } from "@/lib/stand/logic";
 import type { FieldErrors } from "@/lib/stand/logic";
@@ -610,7 +610,11 @@ export function AboutSheet({ open, onOpenChange }: { open: boolean; onOpenChange
           no account and no cloud copy.
         </p>
         <p className="text-muted">
-          The app is downloaded from GitHub only. It is not hosted on Grok.{" "}
+          Download it from GitHub, the same way as the receipt tracker.{" "}
+          <a className="underline" href={APP_INSTALL_URL}>
+            Open the install page
+          </a>
+          . Android gets the app file. iPhone uses Safari, then Add to Home Screen. It is not hosted on Grok.{" "}
           <a className="underline" href={APP_SOURCE_URL}>
             thelubemaster/flower-stand-tracker
           </a>

@@ -7,3 +7,6 @@ screenshots
 .env
 .env.*
 .DS_Store
+android
+.capacitor
+

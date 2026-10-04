@@ -20,6 +20,7 @@ import {
 import { rehydrateStand, useStandStore } from "@/lib/stand/store";
 import { installOfflineCopy } from "@/lib/stand/offline";
 import { AboutSheet, BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand/forms";
+import { InstallView, runningAsInstalledApp } from "@/components/stand/install-view";
 import { Choice, PressButton } from "@/components/stand/ui";
 
 const AnalyticsView = lazy(() =>
@@ -30,6 +31,7 @@ type Tab = "stand" | "cash" | "stats" | "record";
 
 export function StandApp() {
   const hydrated = useStandStore((state) => state.hydrated);
+  const [installing, setInstalling] = useState(false);
   const [tab, setTab] = useState<Tab>("stand");
   const [buyOpen, setBuyOpen] = useState(false);
   const [cashOpen, setCashOpen] = useState(false);
@@ -40,7 +42,27 @@ export function StandApp() {
   useEffect(() => {
     rehydrateStand();
     installOfflineCopy();
+    const params = new URLSearchParams(window.location.search);
+    const hashQuery = window.location.hash.includes("?") ? window.location.hash.slice(window.location.hash.indexOf("?") + 1) : "";
+    const hashParams = new URLSearchParams(hashQuery);
+    if ((params.get("install") === "1" || hashParams.get("install") === "1") && !runningAsInstalledApp()) {
+      setInstalling(true);
+    }
   }, []);
+
+  if (installing) {
+    return (
+      <div className="min-h-dvh bg-paper text-ink" data-app-version={APP_VERSION}>
+        <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col">
+          <Header onAbout={() => setAboutOpen(true)} />
+          <main className="flex-1 px-4 pb-10">
+            <InstallView onUseHere={() => setInstalling(false)} />
+          </main>
+        </div>
+        <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} />
+      </div>
+    );
+  }
 
   if (!hydrated) {
     return (

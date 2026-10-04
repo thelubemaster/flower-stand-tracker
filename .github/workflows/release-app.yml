@@ -1,0 +1,160 @@
+# Build the static app, publish GitHub Pages, and attach the Android APK.
+# Install link: https://thelubemaster.github.io/flower-stand-tracker/?install=1
+name: Release app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-release
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - id: ver
+        run: |
+          version=$(node -e "const fs=require('fs'); const s=fs.readFileSync('src/lib/version.ts','utf8'); const m=s.match(/APP_VERSION = \"([^\"]+)\"/); if(!m) process.exit(1); process.stdout.write(m[1]);")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          test -n "$version"
+
+      - run: npm run build:pages
+
+      - name: Pages extras
+        run: |
+          set -euo pipefail
+          cp dist/client/index.html dist/client/404.html
+          test -f dist/client/.nojekyll || touch dist/client/.nojekyll
+          printf '%s\n' "{\"version\":\"${{ steps.ver.outputs.version }}\",\"installUrl\":\"https://thelubemaster.github.io/flower-stand-tracker/?install=1\",\"apkUrl\":\"https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk\"}" > dist/client/install.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-dist
+          path: dist/client
+          include-hidden-files: true
+          retention-days: 7
+
+  apk:
+    runs-on: ubuntu-latest
+    needs: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools"
+
+      - run: npm ci
+      - run: npm run build:pages
+      - run: npm install @capacitor/core@7.6.8 @capacitor/cli@7.6.8 @capacitor/android@7.6.8
+
+      - name: Add Android project and build APK
+        env:
+          CI: "true"
+        run: |
+          set -euo pipefail
+          npx cap add android
+          npx cap sync android
+          if [ -n "${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}" ]; then
+            printf 'sdk.dir=%s\n' "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > android/local.properties
+          fi
+          chmod +x android/gradlew
+          (cd android && ./gradlew assembleDebug --no-daemon --stacktrace)
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/flower-stand.apk
+          ls -lh artifacts/flower-stand.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-apk
+          path: artifacts/flower-stand.apk
+          retention-days: 14
+          if-no-files-found: error
+
+  pages:
+    needs: web
+    if: ${{ always() && needs.web.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-dist
+          path: site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    needs: [web, apk]
+    if: ${{ always() && needs.web.result == 'success' && needs.apk.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-apk
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.web.outputs.version }}
+          name: Flower Stand v${{ needs.web.outputs.version }}
+          body: |
+            ## Install
+
+            **[Open the install page](https://thelubemaster.github.io/flower-stand-tracker/?install=1)**
+
+            | Device | How |
+            | --- | --- |
+            | Android | Install page → download flower-stand.apk → Install |
+            | iPhone / iPad | Open that link in Safari → Share → Add to Home Screen |
+
+            Direct Android file: [flower-stand.apk](https://github.com/thelubemaster/flower-stand-tracker/releases/latest/download/flower-stand.apk)
+          files: artifacts/flower-stand.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,8 @@
+{
+  "appId": "app.flowerstand.book",
+  "appName": "Flower Stand",
+  "webDir": "dist/client",
+  "server": {
+    "androidScheme": "https"
+  }
+}

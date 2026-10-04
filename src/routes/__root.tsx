@@ -4,6 +4,8 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { APP_NAME } from "@/lib/version";
 import appCss from "../styles.css?url";
 
+const base = import.meta.env.BASE_URL;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -12,13 +14,15 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       { name: "description", content: "Track flower stand stock, what you paid, and the cash you collect." },
       { name: "theme-color", content: "#f4efe6" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
     ],
     links: [
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "manifest", href: `${base}manifest.webmanifest` },
+      { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` },
     ],
   }),
   component: () => (
