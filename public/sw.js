@@ -1,4 +1,4 @@
-const CACHE = "flower-stand-1.9.2";
+const CACHE = "flower-stand-1.9.3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

@@ -1,5 +1,5 @@
 /** Bump this on every update the stand should be able to see. Keep public/sw.js and public/app-update.json in sync. */
-export const APP_VERSION = "1.9.2";
+export const APP_VERSION = "1.9.3";
 
 export const APP_NAME = "Flower Stand";
 
@@ -38,6 +38,16 @@ export type ChangelogEntry = {
 
 /** Newest first. Shown in the update sheet. */
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.9.3",
+    date: "2026-10-03",
+    title: "A bigger sample stand",
+    changes: [
+      "The sample is a full month: colors, pumpkins, plants, decor, cash, and price drops",
+      "Show a sample stand replaces the small example",
+      "Take the sample off still clears it",
+    ],
+  },
   {
     version: "1.9.2",
     date: "2026-10-03",
