@@ -1,7 +1,7 @@
 import { format } from "date-fns";
-import { formatMoney, kindTitle, localDay } from "@/lib/stand/format";
+import { formatMoney, itemName, localDay } from "@/lib/stand/format";
 import { roundMoney, unitCost } from "@/lib/stand/logic";
-import type { Collection, Kind, Purchase, Removal } from "@/lib/stand/types";
+import type { Collection, Purchase, Removal } from "@/lib/stand/types";
 
 export type RangeKey = "7" | "30" | "all";
 
@@ -13,8 +13,7 @@ export type CashPoint = {
 };
 
 export type KindSlice = {
-  kind: Kind;
-  title: string;
+  label: string;
   onStand: number;
   share: number;
 };
@@ -47,7 +46,7 @@ export type Analytics = {
   lots: LotRoom[];
 };
 
-const KINDS: Kind[] = ["flower", "plant", "pumpkin"];
+const BAR_LIMIT = 6;
 
 function parseDay(day: string): Date {
   const [year, month, date] = day.split("-").map(Number);
@@ -183,18 +182,19 @@ export function buildAnalytics(
   const onStand = purchases.reduce((sum, purchase) => sum + purchase.remaining, 0);
   const asking = roundMoney(purchases.reduce((sum, purchase) => sum + purchase.remaining * purchase.sellPrice, 0));
   const costOut = roundMoney(purchases.reduce((sum, purchase) => sum + purchase.remaining * unitCost(purchase), 0));
-  const kinds = KINDS.map((kind) => {
-    const pieces = purchases.reduce(
-      (sum, purchase) => (purchase.kind === kind ? sum + purchase.remaining : sum),
-      0,
-    );
-    return {
-      kind,
-      title: kindTitle(kind),
+  const grouped = new Map<string, number>();
+  for (const purchase of purchases) {
+    if (purchase.remaining <= 0) continue;
+    grouped.set(purchase.label, (grouped.get(purchase.label) ?? 0) + purchase.remaining);
+  }
+  const kinds = [...grouped.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, BAR_LIMIT)
+    .map(([label, pieces]) => ({
+      label,
       onStand: pieces,
       share: onStand > 0 ? (pieces / onStand) * 100 : 0,
-    };
-  });
+    }));
 
   const purchaseById = new Map(purchases.map((purchase) => [purchase.id, purchase]));
   let ranOut = 0;
@@ -219,7 +219,7 @@ export function buildAnalytics(
       const unit = unitCost(purchase);
       return {
         id: purchase.id,
-        name: purchase.name,
+        name: itemName(purchase),
         unit,
         ask: purchase.sellPrice,
         room: roundMoney((purchase.sellPrice - unit) * purchase.remaining),

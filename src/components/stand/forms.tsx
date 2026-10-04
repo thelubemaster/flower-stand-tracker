@@ -1,25 +1,29 @@
 import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { APP_SOURCE_URL, APP_VERSION } from "@/lib/version";
-import { formatMoney, kindTitle, localDay } from "@/lib/stand/format";
+import { formatMoney, itemName, localDay } from "@/lib/stand/format";
 import { draftFromPurchase } from "@/lib/stand/logic";
 import type { FieldErrors } from "@/lib/stand/logic";
 import { useStandStore } from "@/lib/stand/store";
-import type { CashDraft, Kind, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
+import type { CashDraft, PartDraft, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
 import { Choice, Field, PressButton, Sheet, TextControl, AreaControl } from "@/components/stand/ui";
-
-const KINDS: Kind[] = ["flower", "plant", "pumpkin"];
 
 function emptyPurchase(): PurchaseDraft {
   return {
     name: "",
-    kind: "flower",
+    label: "",
+    detail: "",
     quantity: "",
     totalCost: "",
     sellPrice: "",
     day: localDay(),
     note: "",
+    parts: [],
   };
+}
+
+function emptyPart(): PartDraft {
+  return { detail: "", quantity: "" };
 }
 
 function failure(result: { ok: true } | { ok: false; errors?: FieldErrors; error?: string }): FieldErrors | null {
@@ -30,6 +34,8 @@ function failure(result: { ok: true } | { ok: false; errors?: FieldErrors; error
 
 export function BuySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const addPurchase = useStandStore((state) => state.addPurchase);
+  const purchases = useStandStore((state) => state.purchases);
+  const knownLabels = [...new Set(purchases.map((row) => row.label).filter(Boolean))].sort();
   const [draft, setDraft] = useState<PurchaseDraft>(emptyPurchase);
   const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -40,13 +46,16 @@ export function BuySheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
   }, [open]);
 
   const paidEach = paidEachPreview(draft);
+  const splitting = draft.parts.length > 0;
+  const lotCount = /^\d+$/.test(draft.quantity.trim()) ? Number(draft.quantity) : null;
+  const assigned = draft.parts.reduce((sum, part) => sum + (/^\d+$/.test(part.quantity.trim()) ? Number(part.quantity) : 0), 0);
 
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
       title="Add to the stand"
-      description="A bunch, a flat, or a crate. This stays in the record even after it sells out."
+      description="Name it anything. One buy can be split into colors or kinds."
     >
       <form
         className="grid gap-4"
@@ -61,12 +70,17 @@ export function BuySheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
           onOpenChange(false);
         }}
       >
-        <KindField kind={draft.kind} onChange={(kind) => setDraft({ ...draft, kind })} />
+        <LabelField
+          value={draft.label}
+          suggestions={knownLabels}
+          error={errors.label}
+          onChange={(label) => setDraft({ ...draft, label })}
+        />
         <Field label="What is it?" error={errors.name}>
           <TextControl
             value={draft.name}
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-            placeholder="Sunflowers"
+            placeholder="Mums"
             autoComplete="off"
           />
         </Field>
@@ -78,6 +92,89 @@ export function BuySheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             placeholder="24"
           />
         </Field>
+        {splitting ? (
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-medium">Colors or kinds</legend>
+            {draft.parts.map((part, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <TextControl
+                  className="min-w-0 flex-1"
+                  value={part.detail}
+                  aria-label={`Kind ${index + 1}`}
+                  placeholder="Yellow"
+                  onChange={(event) => {
+                    const parts = draft.parts.slice();
+                    parts[index] = { ...part, detail: event.target.value };
+                    setDraft({ ...draft, parts });
+                  }}
+                />
+                <TextControl
+                  inputMode="numeric"
+                  value={part.quantity}
+                  aria-label={`How many of kind ${index + 1}`}
+                  placeholder="10"
+                  className="w-20 text-center tabular-nums"
+                  onChange={(event) => {
+                    const parts = draft.parts.slice();
+                    parts[index] = { ...part, quantity: event.target.value };
+                    setDraft({ ...draft, parts });
+                  }}
+                />
+                <PressButton
+                  variant="quiet"
+                  className="size-11 px-0"
+                  aria-label={`Remove kind ${index + 1}`}
+                  onClick={() => setDraft({ ...draft, parts: draft.parts.filter((_, row) => row !== index) })}
+                >
+                  <Minus className="size-5" aria-hidden />
+                </PressButton>
+              </div>
+            ))}
+            <p className="text-sm text-pretty text-muted">
+              {lotCount == null
+                ? "Enter how many you bought, then split them."
+                : assigned === lotCount
+                  ? `Those ${assigned} add up.`
+                  : `${assigned} of ${lotCount} named.`}
+            </p>
+            {errors.parts ? (
+              <p className="text-sm text-clay" role="alert">
+                {errors.parts}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {draft.parts.length < 12 ? (
+                <PressButton
+                  variant="quiet"
+                  onClick={() => setDraft({ ...draft, parts: [...draft.parts, emptyPart()] })}
+                >
+                  Add another
+                </PressButton>
+              ) : null}
+              <PressButton variant="ghost" onClick={() => setDraft({ ...draft, parts: [] })}>
+                Don't break it up
+              </PressButton>
+            </div>
+          </fieldset>
+        ) : (
+          <>
+            <Field label="Color or kind" error={errors.detail} hint="Optional. Leave blank if this buy is just one thing.">
+              <TextControl
+                value={draft.detail}
+                onChange={(event) => setDraft({ ...draft, detail: event.target.value })}
+                placeholder="Yellow"
+                autoComplete="off"
+              />
+            </Field>
+            <PressButton
+              variant="quiet"
+              className="w-full"
+              onClick={() => setDraft({ ...draft, detail: "", parts: [emptyPart(), emptyPart()] })}
+            >
+              Break into colors
+            </PressButton>
+          </>
+        )}
         <Field label="Paid for the lot" error={errors.totalCost} hint={paidEach}>
           <TextControl
             inputMode="decimal"
@@ -132,6 +229,8 @@ export function EditSheet({
   const purchase = useStandStore((state) => state.purchases.find((row) => row.id === purchaseId));
   const updatePurchase = useStandStore((state) => state.updatePurchase);
   const deletePurchase = useStandStore((state) => state.deletePurchase);
+  const purchases = useStandStore((state) => state.purchases);
+  const knownLabels = [...new Set(purchases.map((row) => row.label).filter(Boolean))].sort();
   const [draft, setDraft] = useState<PurchaseDraft>(emptyPurchase);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -167,11 +266,22 @@ export function EditSheet({
             onOpenChange(false);
           }}
         >
-          <KindField kind={draft.kind} onChange={(kind) => setDraft({ ...draft, kind })} />
+          <LabelField
+            value={draft.label}
+            suggestions={knownLabels}
+            error={errors.label}
+            onChange={(label) => setDraft({ ...draft, label })}
+          />
           <Field label="What is it?" error={errors.name}>
             <TextControl
               value={draft.name}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            />
+          </Field>
+          <Field label="Color or kind" error={errors.detail} hint="Optional. Yellow, white, or whatever this part is.">
+            <TextControl
+              value={draft.detail}
+              onChange={(event) => setDraft({ ...draft, detail: event.target.value })}
             />
           </Field>
           <Field
@@ -303,7 +413,7 @@ export function TakeOffSheet({
           }}
         >
           <p className="text-sm text-pretty text-muted">
-            <span className="font-medium text-ink">{purchase.name}</span>
+            <span className="font-medium text-ink">{itemName(purchase)}</span>
             {` · you bought ${purchase.quantity}`}
             {purchase.remaining === purchase.quantity
               ? `. All ${purchase.remaining} are still out.`
@@ -514,18 +624,36 @@ export function AboutSheet({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
-function KindField({ kind, onChange }: { kind: Kind; onChange: (kind: Kind) => void }) {
+function LabelField({
+  value,
+  suggestions,
+  error,
+  onChange,
+}: {
+  value: string;
+  suggestions: string[];
+  error?: string;
+  onChange: (label: string) => void;
+}) {
+  const shown = suggestions.filter((label) => label.trim()).slice(0, 8);
   return (
-    <fieldset>
-      <legend className="mb-2 text-sm font-medium">Kind</legend>
-      <div className="grid grid-cols-3 gap-2">
-        {KINDS.map((option) => (
-          <Choice key={option} selected={kind === option} onClick={() => onChange(option)}>
-            {kindTitle(option)}
-          </Choice>
-        ))}
-      </div>
-    </fieldset>
+    <Field label="Label" error={error}>
+      <TextControl
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Flowers, produce, jars"
+        autoComplete="off"
+      />
+      {shown.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {shown.map((label) => (
+            <Choice key={label} selected={value.trim().toLowerCase() === label.toLowerCase()} onClick={() => onChange(label)}>
+              {label}
+            </Choice>
+          ))}
+        </div>
+      ) : null}
+    </Field>
   );
 }
 

@@ -1,11 +1,17 @@
-export type Kind = "flower" | "plant" | "pumpkin";
-
 export type RemovalReason = "ran-out" | "tossed" | "dead";
+
+export type PartDraft = {
+  detail: string;
+  quantity: string;
+};
 
 export type Purchase = {
   id: string;
+  lotId: string;
+  partIndex: number;
   name: string;
-  kind: Kind;
+  label: string;
+  detail: string;
   quantity: number;
   remaining: number;
   totalCost: number;
@@ -18,7 +24,8 @@ export type Removal = {
   id: string;
   purchaseId: string;
   name: string;
-  kind: Kind;
+  label: string;
+  detail: string;
   quantity: number;
   reason: RemovalReason;
   at: string;
@@ -34,12 +41,14 @@ export type Collection = {
 
 export type PurchaseDraft = {
   name: string;
-  kind: Kind;
+  label: string;
+  detail: string;
   quantity: string;
   totalCost: string;
   sellPrice: string;
   day: string;
   note: string;
+  parts: PartDraft[];
 };
 
 export type CashDraft = {

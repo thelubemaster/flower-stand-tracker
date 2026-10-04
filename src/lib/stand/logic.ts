@@ -2,7 +2,6 @@ import { dayToIso, localDay } from "@/lib/stand/format";
 import type {
   CashDraft,
   Collection,
-  Kind,
   Purchase,
   PurchaseDraft,
   Removal,
@@ -11,11 +10,14 @@ import type {
 } from "@/lib/stand/types";
 
 export type FieldErrors = Partial<
-  Record<"name" | "quantity" | "totalCost" | "sellPrice" | "day" | "note" | "amount" | "left" | "reason" | "form", string>
+  Record<"name" | "label" | "detail" | "quantity" | "totalCost" | "sellPrice" | "day" | "note" | "amount" | "left" | "reason" | "parts" | "form", string>
 >;
 
 const NAME_MAX = 80;
+const LABEL_MAX = 40;
+const DETAIL_MAX = 40;
 const NOTE_MAX = 200;
+const PART_MAX = 12;
 const QTY_MAX = 100000;
 const MONEY_MAX = 999999.99;
 
@@ -56,11 +58,11 @@ export function collectedOnDay(collections: Collection[], day = localDay()): num
   }, 0);
 }
 
-export function activePurchases(purchases: Purchase[], kind?: Kind | "all"): Purchase[] {
+export function activePurchases(purchases: Purchase[], label?: string | "all"): Purchase[] {
   return purchases
-    .filter((purchase) => purchase.remaining > 0 && (kind == null || kind === "all" || purchase.kind === kind))
+    .filter((purchase) => purchase.remaining > 0 && (label == null || label === "all" || purchase.label === label))
     .slice()
-    .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+    .sort((a, b) => b.at.localeCompare(a.at) || a.partIndex - b.partIndex || a.id.localeCompare(b.id));
 }
 
 export function clearedCount(purchases: Purchase[]): number {
@@ -103,7 +105,15 @@ export function validatePurchaseDraft(draft: PurchaseDraft, now = new Date()): F
   if (!name) errors.name = "Name what you bought.";
   else if (name.length > NAME_MAX) errors.name = `Keep the name under ${NAME_MAX} characters.`;
 
-  if (parseQuantity(draft.quantity) == null) errors.quantity = "Enter how many, as a whole number.";
+  const label = draft.label.trim();
+  if (!label) errors.label = "Give it a label, like Flowers or Produce.";
+  else if (label.length > LABEL_MAX) errors.label = `Keep the label under ${LABEL_MAX} characters.`;
+
+  const detail = draft.detail.trim();
+  if (detail.length > DETAIL_MAX) errors.detail = `Keep that under ${DETAIL_MAX} characters.`;
+
+  const quantity = parseQuantity(draft.quantity);
+  if (quantity == null) errors.quantity = "Enter how many, as a whole number.";
   if (parseMoney(draft.totalCost) == null) errors.totalCost = "Enter what you paid for the lot, like 24 or 24.50.";
   if (parseMoney(draft.sellPrice) == null) errors.sellPrice = "Enter the price for one, like 5 or 5.00.";
   if (parseDay(draft.day) == null) errors.day = "Pick the day you bought them.";
@@ -111,7 +121,99 @@ export function validatePurchaseDraft(draft: PurchaseDraft, now = new Date()): F
 
   const note = cleanNote(draft.note);
   if (note.error) errors.note = note.error;
+
+  const parts = draft.parts.filter((part) => part.detail.trim() || part.quantity.trim());
+  if (parts.length > PART_MAX) errors.parts = `Break it into ${PART_MAX} or fewer.`;
+  if (parts.length > 0 && quantity != null && !errors.parts) {
+    const seen = new Set<string>();
+    let assigned = 0;
+    for (const part of parts) {
+      const partName = part.detail.trim();
+      const partQty = parseQuantity(part.quantity);
+      if (!partName || partName.length > DETAIL_MAX) {
+        errors.parts = "Name each color or kind.";
+        break;
+      }
+      const key = partName.toLowerCase();
+      if (seen.has(key)) {
+        errors.parts = `${partName} is listed twice.`;
+        break;
+      }
+      seen.add(key);
+      if (partQty == null) {
+        errors.parts = `Enter how many ${partName}.`;
+        break;
+      }
+      assigned += partQty;
+    }
+    if (!errors.parts && assigned !== quantity) {
+      errors.parts = `Those add up to ${assigned}, not ${quantity}.`;
+    }
+  }
   return errors;
+}
+
+function splitCost(total: number, quantities: number[]): number[] {
+  const sum = quantities.reduce((count, quantity) => count + quantity, 0);
+  if (sum <= 0) return quantities.map(() => 0);
+  const costs = quantities.map((quantity) => roundMoney((total * quantity) / sum));
+  const drift = roundMoney(total - costs.reduce((count, cost) => count + cost, 0));
+  costs[costs.length - 1] = roundMoney(costs[costs.length - 1] + drift);
+  return costs;
+}
+
+export function purchasesFromDraft(
+  draft: PurchaseDraft,
+  makeId: () => string,
+  now = new Date(),
+): { ok: true; purchases: Purchase[] } | { ok: false; errors: FieldErrors } {
+  const errors = validatePurchaseDraft(draft, now);
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const parts = draft.parts.filter((part) => part.detail.trim() || part.quantity.trim());
+  const totalCost = parseMoney(draft.totalCost)!;
+  const sellPrice = parseMoney(draft.sellPrice)!;
+  const at = dayToIso(draft.day, now);
+  const note = draft.note.trim();
+  const lotId = makeId();
+  const shared = {
+    lotId,
+    name: draft.name.trim(),
+    label: draft.label.trim(),
+    sellPrice,
+    at,
+    note,
+  };
+  if (parts.length === 0) {
+    const quantity = parseQuantity(draft.quantity)!;
+    return {
+      ok: true,
+      purchases: [
+        {
+          ...shared,
+          id: makeId(),
+          partIndex: 0,
+          detail: draft.detail.trim(),
+          quantity,
+          remaining: quantity,
+          totalCost,
+        },
+      ],
+    };
+  }
+  const quantities = parts.map((part) => parseQuantity(part.quantity)!);
+  const costs = splitCost(totalCost, quantities);
+  return {
+    ok: true,
+    purchases: parts.map((part, index) => ({
+      ...shared,
+      id: makeId(),
+      partIndex: index,
+      detail: part.detail.trim(),
+      quantity: quantities[index],
+      remaining: quantities[index],
+      totalCost: costs[index],
+    })),
+  };
 }
 
 export function purchaseFromDraft(
@@ -119,21 +221,9 @@ export function purchaseFromDraft(
   id: string,
   now = new Date(),
 ): { ok: true; purchase: Purchase } | { ok: false; errors: FieldErrors } {
-  const errors = validatePurchaseDraft(draft, now);
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
-  const quantity = parseQuantity(draft.quantity)!;
-  const purchase: Purchase = {
-    id,
-    name: draft.name.trim(),
-    kind: draft.kind,
-    quantity,
-    remaining: quantity,
-    totalCost: parseMoney(draft.totalCost)!,
-    sellPrice: parseMoney(draft.sellPrice)!,
-    at: dayToIso(draft.day, now),
-    note: draft.note.trim(),
-  };
-  return { ok: true, purchase };
+  const built = purchasesFromDraft({ ...draft, parts: [] }, () => id, now);
+  if (!built.ok) return built;
+  return { ok: true, purchase: { ...built.purchases[0], id } };
 }
 
 export function revisePurchase(
@@ -154,7 +244,8 @@ export function revisePurchase(
     purchase: {
       ...current,
       name: draft.name.trim(),
-      kind: draft.kind,
+      label: draft.label.trim(),
+      detail: draft.detail.trim(),
       quantity: nextQuantity,
       remaining: nextQuantity - alreadyOff,
       totalCost: parseMoney(draft.totalCost)!,
@@ -235,7 +326,8 @@ export function closeLotFromDraft(
   const base = {
     purchaseId: purchase.id,
     name: purchase.name,
-    kind: purchase.kind,
+    label: purchase.label,
+    detail: purchase.detail,
     at,
     note,
   };
@@ -289,12 +381,14 @@ export function restoreRemoval(
 export function draftFromPurchase(purchase: Purchase): PurchaseDraft {
   return {
     name: purchase.name,
-    kind: purchase.kind,
+    label: purchase.label,
+    detail: purchase.detail,
     quantity: String(purchase.quantity),
     totalCost: purchase.totalCost.toFixed(2),
     sellPrice: purchase.sellPrice.toFixed(2),
     day: localDay(new Date(purchase.at)),
     note: purchase.note,
+    parts: [],
   };
 }
 
@@ -344,7 +438,7 @@ export function ledgerCsv(
   removals: Removal[],
   collections: Collection[],
 ): string {
-  const header = ["when", "type", "name", "kind", "quantity", "money", "reason", "note", "id"];
+  const header = ["when", "type", "name", "label", "detail", "quantity", "money", "reason", "note", "id"];
   const lines = [header.join(",")];
   const rows = buildLedger(purchases, removals, collections, "all");
   for (const row of rows) {
@@ -355,7 +449,8 @@ export function ledgerCsv(
           purchase.at,
           "bought",
           purchase.name,
-          purchase.kind,
+          purchase.label,
+          purchase.detail,
           purchase.quantity,
           purchase.totalCost.toFixed(2),
           `sell ${purchase.sellPrice.toFixed(2)} each`,
@@ -368,18 +463,73 @@ export function ledgerCsv(
     } else if (row.type === "removed") {
       const removal = row.removal;
       lines.push(
-        [removal.at, "removed", removal.name, removal.kind, removal.quantity, "", removal.reason, removal.note, removal.id]
+        [removal.at, "removed", removal.name, removal.label, removal.detail, removal.quantity, "", removal.reason, removal.note, removal.id]
           .map(csvCell)
           .join(","),
       );
     } else {
       const collection = row.collection;
       lines.push(
-        [collection.at, "cash", "", "", "", collection.amount.toFixed(2), "", collection.note, collection.id]
+        [collection.at, "cash", "", "", "", "", collection.amount.toFixed(2), "", collection.note, collection.id]
           .map(csvCell)
           .join(","),
       );
     }
   }
   return lines.join("\n");
+}
+
+const LEGACY_LABELS: Record<string, string> = {
+  flower: "Flowers",
+  plant: "Plants",
+  pumpkin: "Pumpkins",
+};
+
+function asRecord(raw: unknown): Record<string, unknown> {
+  return raw != null && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function upgradePurchase(raw: unknown): Purchase {
+  const row = asRecord(raw);
+  const legacy = asString(row.kind);
+  const id = asString(row.id, "missing");
+  return {
+    id,
+    lotId: asString(row.lotId, id),
+    partIndex: asNumber(row.partIndex, 0),
+    name: asString(row.name, "Untitled"),
+    label: asString(row.label, LEGACY_LABELS[legacy] ?? (legacy || "Other")),
+    detail: asString(row.detail),
+    quantity: asNumber(row.quantity),
+    remaining: asNumber(row.remaining),
+    totalCost: asNumber(row.totalCost),
+    sellPrice: asNumber(row.sellPrice),
+    at: asString(row.at),
+    note: asString(row.note),
+  };
+}
+
+export function upgradeRemoval(raw: unknown): Removal {
+  const row = asRecord(raw);
+  const legacy = asString(row.kind);
+  const reason = asString(row.reason, "ran-out");
+  return {
+    id: asString(row.id, "missing"),
+    purchaseId: asString(row.purchaseId),
+    name: asString(row.name, "Untitled"),
+    label: asString(row.label, LEGACY_LABELS[legacy] ?? (legacy || "Other")),
+    detail: asString(row.detail),
+    quantity: asNumber(row.quantity),
+    reason: reason === "tossed" || reason === "dead" ? reason : "ran-out",
+    at: asString(row.at),
+    note: asString(row.note),
+  };
 }

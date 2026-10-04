@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { Kind, RemovalReason } from "@/lib/stand/types";
+import type { RemovalReason } from "@/lib/stand/types";
 
 const moneyFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -32,19 +32,9 @@ export function formatStamp(iso: string): string {
   return `${day} · ${format(date, "h:mm a")}`;
 }
 
-export function kindLabel(kind: Kind, count = 2): string {
-  const labels: Record<Kind, [string, string]> = {
-    flower: ["flower", "flowers"],
-    plant: ["plant", "plants"],
-    pumpkin: ["pumpkin", "pumpkins"],
-  };
-  return count === 1 ? labels[kind][0] : labels[kind][1];
-}
-
-export function kindTitle(kind: Kind): string {
-  if (kind === "flower") return "Flowers";
-  if (kind === "plant") return "Plants";
-  return "Pumpkins";
+export function itemName(row: { name: string; detail: string }): string {
+  const detail = row.detail.trim();
+  return detail ? `${row.name} · ${detail}` : row.name;
 }
 
 export function reasonLabel(reason: RemovalReason): string {

@@ -190,34 +190,20 @@ function CashChart({ stats }: { stats: Analytics }) {
 }
 
 function KindMix({ kinds }: { kinds: Analytics["kinds"] }) {
+  const tones = ["bg-moss", "bg-ink", "bg-clay"];
   return (
     <div className="mt-4">
       <div className="flex h-3 overflow-hidden rounded-full bg-paper" aria-hidden>
-        {kinds.map((slice) => (
-          <div
-            key={slice.kind}
-            className={
-              slice.kind === "flower" ? "h-full bg-moss" : slice.kind === "plant" ? "h-full bg-ink" : "h-full bg-clay"
-            }
-            style={{ width: `${slice.share}%` }}
-          />
+        {kinds.map((slice, index) => (
+          <div key={slice.label} className={`h-full ${tones[index % tones.length]}`} style={{ width: `${slice.share}%` }} />
         ))}
       </div>
       <ul className="mt-3 grid gap-2 text-sm">
-        {kinds.map((slice) => (
-          <li key={slice.kind} className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2">
-              <span
-                className={
-                  slice.kind === "flower"
-                    ? "size-2.5 rounded-full bg-moss"
-                    : slice.kind === "plant"
-                      ? "size-2.5 rounded-full bg-ink"
-                      : "size-2.5 rounded-full bg-clay"
-                }
-                aria-hidden
-              />
-              {slice.title}
+        {kinds.map((slice, index) => (
+          <li key={slice.label} className="flex items-center justify-between gap-3">
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <span className={`size-2.5 shrink-0 rounded-full ${tones[index % tones.length]}`} aria-hidden />
+              <span className="truncate">{slice.label}</span>
             </span>
             <span className="tabular-nums">{slice.onStand}</span>
           </li>

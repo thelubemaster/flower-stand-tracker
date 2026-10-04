@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Banknote, ChartColumn, ScrollText, Sprout } from "lucide-react";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
-import { formatMoney, formatStamp, kindLabel, kindTitle, localDay, reasonLabel } from "@/lib/stand/format";
+import { formatMoney, formatStamp, itemName, localDay, reasonLabel } from "@/lib/stand/format";
 import {
   activePurchases,
   askingValue,
@@ -19,7 +19,6 @@ import {
 } from "@/lib/stand/logic";
 import { rehydrateStand, useStandStore } from "@/lib/stand/store";
 import { installOfflineCopy } from "@/lib/stand/offline";
-import type { Kind } from "@/lib/stand/types";
 import { AboutSheet, BuySheet, CashSheet, EditSheet, TakeOffSheet } from "@/components/stand/forms";
 import { Choice, PressButton } from "@/components/stand/ui";
 
@@ -28,7 +27,6 @@ const AnalyticsView = lazy(() =>
 );
 
 type Tab = "stand" | "cash" | "stats" | "record";
-type KindFilter = "all" | Kind;
 
 export function StandApp() {
   const hydrated = useStandStore((state) => state.hydrated);
@@ -146,9 +144,10 @@ function StandView({
   onTake: (id: string) => void;
 }) {
   const purchases = useStandStore((state) => state.purchases);
-  const [kind, setKind] = useState<KindFilter>("all");
+  const [label, setLabel] = useState("all");
   const active = activePurchases(purchases);
-  const shown = kind === "all" ? active : active.filter((purchase) => purchase.kind === kind);
+  const labels = [...new Set(active.map((purchase) => purchase.label))].sort((a, b) => a.localeCompare(b));
+  const shown = label === "all" ? active : active.filter((purchase) => purchase.label === label);
   const cleared = clearedCount(purchases);
 
   return (
@@ -172,15 +171,14 @@ function StandView({
       </PressButton>
       {active.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          <Choice selected={kind === "all"} onClick={() => setKind("all")}>
+          <Choice selected={label === "all"} onClick={() => setLabel("all")}>
             All {active.length}
           </Choice>
-          {(["flower", "plant", "pumpkin"] as const).map((option) => {
-            const count = active.filter((purchase) => purchase.kind === option).length;
-            if (count === 0) return null;
+          {labels.map((option) => {
+            const count = active.filter((purchase) => purchase.label === option).length;
             return (
-              <Choice key={option} selected={kind === option} onClick={() => setKind(option)}>
-                {kindTitle(option)} {count}
+              <Choice key={option} selected={label === option} onClick={() => setLabel(option)}>
+                {option} {count}
               </Choice>
             );
           })}
@@ -190,7 +188,7 @@ function StandView({
         <section className="rounded-card border border-line bg-card px-4 py-8 text-center">
           <h2 className="font-display text-2xl text-balance">Nothing is out right now</h2>
           <p className="mt-2 text-sm text-pretty text-muted">
-            Add flowers, plants, or pumpkins. They stay on this list until you take them off and say if they sold out or how many were left.
+            Add whatever you're selling. Name it, then break one buy into colors if you need to.
           </p>
         </section>
       ) : null}
@@ -202,14 +200,24 @@ function StandView({
           <li key={purchase.id} className="rounded-card border border-line bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-muted">{kindTitle(purchase.kind)}</p>
-                <h2 className="font-display text-2xl leading-tight text-balance break-words">{purchase.name}</h2>
+                <p className="text-sm text-muted">{purchase.label}</p>
+                <h2 className="font-display text-2xl leading-tight text-balance break-words">
+                  {purchase.detail || purchase.name}
+                </h2>
+                {purchase.detail ? <p className="text-sm text-muted">{purchase.name}</p> : null}
               </div>
               <p className="font-display text-4xl tabular-nums leading-none">{purchase.remaining}</p>
             </div>
             <p className="mt-2 text-sm text-muted">
               of {purchase.quantity} bought · {formatStamp(purchase.at)}
             </p>
+            {purchases.filter((row) => row.lotId === purchase.lotId).length > 1 ? (
+              <p className="text-sm text-muted">
+                Part of{" "}
+                {purchases.filter((row) => row.lotId === purchase.lotId).reduce((sum, row) => sum + row.quantity, 0)}{" "}
+                {purchase.name}
+              </p>
+            ) : null}
             <p className="mt-3 text-sm">
               Selling for <span className="font-medium tabular-nums">{formatMoney(purchase.sellPrice)}</span> each
             </p>
@@ -369,9 +377,10 @@ function RecordView() {
             return (
               <li key={row.id} className="rounded-card border border-line bg-card px-4 py-3">
                 <p className="text-sm text-muted">Bought · {formatStamp(purchase.at)}</p>
-                <p className="mt-1 font-medium break-words">{purchase.name}</p>
+                <p className="font-medium break-words">{itemName(purchase)}</p>
                 <p className="text-sm text-muted">
-                  {purchase.quantity} {kindLabel(purchase.kind, purchase.quantity)} · paid {formatMoney(purchase.totalCost)} · sell {formatMoney(purchase.sellPrice)} each
+                  {purchase.label} · {purchase.quantity} bought · paid {formatMoney(purchase.totalCost)} · sell{" "}
+                  {formatMoney(purchase.sellPrice)} each
                 </p>
                 <p className="text-sm text-muted">{lotOutcome(purchase, removals)}</p>
                 {purchase.note ? <p className="mt-1 text-sm text-pretty">{purchase.note}</p> : null}
@@ -385,10 +394,9 @@ function RecordView() {
                 <p className="text-sm text-muted">
                   {reasonLabel(removal.reason)} · {formatStamp(removal.at)}
                 </p>
-                <p className="mt-1 font-medium break-words">{removal.name}</p>
+                <p className="mt-1 font-medium break-words">{itemName(removal)}</p>
                 <p className="text-sm text-muted">
-                  {removal.quantity} {kindLabel(removal.kind, removal.quantity)}{" "}
-                  {removal.reason === "ran-out" ? "sold out" : "left the stand"}
+                  {removal.quantity} {removal.reason === "ran-out" ? "sold out" : "left the stand"}
                 </p>
                 {removal.note ? <p className="mt-1 text-sm text-pretty">{removal.note}</p> : null}
                 <PressButton

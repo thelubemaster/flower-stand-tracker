@@ -2,10 +2,12 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
   collectionFromDraft,
-  purchaseFromDraft,
+  purchasesFromDraft,
   closeLotFromDraft,
   restoreRemoval,
   revisePurchase,
+  upgradePurchase,
+  upgradeRemoval,
 } from "@/lib/stand/logic";
 import type { CashDraft, Collection, Purchase, PurchaseDraft, Removal, TakeOffDraft } from "@/lib/stand/types";
 import type { FieldErrors } from "@/lib/stand/logic";
@@ -40,9 +42,9 @@ export const useStandStore = create<StandState>()(
       hydrated: false,
       setHydrated: (hydrated) => set({ hydrated }),
       addPurchase: (draft) => {
-        const built = purchaseFromDraft(draft, newId());
+        const built = purchasesFromDraft(draft, newId);
         if (!built.ok) return built;
-        set({ purchases: [built.purchase, ...get().purchases] });
+        set({ purchases: [...built.purchases, ...get().purchases] });
         return { ok: true };
       },
       updatePurchase: (id, draft) => {
@@ -54,7 +56,7 @@ export const useStandStore = create<StandState>()(
           purchases: get().purchases.map((purchase) => (purchase.id === id ? revised.purchase : purchase)),
           removals: get().removals.map((removal) =>
             removal.purchaseId === id
-              ? { ...removal, name: revised.purchase.name, kind: revised.purchase.kind }
+              ? { ...removal, name: revised.purchase.name, label: revised.purchase.label, detail: revised.purchase.detail }
               : removal,
           ),
         });
@@ -114,7 +116,7 @@ export const useStandStore = create<StandState>()(
     }),
     {
       name: "flower-stand-ledger-v1",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({
@@ -122,6 +124,18 @@ export const useStandStore = create<StandState>()(
         removals: state.removals,
         collections: state.collections,
       }),
+      migrate: (persisted) => {
+        const data = (persisted ?? {}) as {
+          purchases?: unknown[];
+          removals?: unknown[];
+          collections?: Collection[];
+        };
+        return {
+          purchases: (data.purchases ?? []).map(upgradePurchase),
+          removals: (data.removals ?? []).map(upgradeRemoval),
+          collections: data.collections ?? [],
+        };
+      },
       onRehydrateStorage: () => () => {
         useStandStore.getState().setHydrated(true);
       },
