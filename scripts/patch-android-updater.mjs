@@ -66,4 +66,39 @@ if (!xml.includes("REQUEST_INSTALL_PACKAGES")) {
   writeFileSync(manifest, xml);
 }
 
+copyFileSync(join(root, "android-shell/flower-stand.keystore"), join(root, "android/app/flower-stand.keystore"));
+
+const gradlePath = join(root, "android/app/build.gradle");
+let gradle = readFileSync(gradlePath, "utf8");
+if (!gradle.includes("flower-stand.keystore")) {
+  const signed = `signingConfigs {
+        flowerstand {
+            storeFile file("flower-stand.keystore")
+            storePassword "fs-stand-9f3c1a7e"
+            keyAlias "flowerstand"
+            keyPassword "fs-stand-9f3c1a7e"
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.flowerstand
+        }
+        release {
+            signingConfig signingConfigs.flowerstand
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }`;
+  if (!gradle.includes("buildTypes {")) {
+    console.error("Could not find buildTypes in the Android project.");
+    process.exit(1);
+  }
+  gradle = gradle.replace(/buildTypes \{[\s\S]*?\n    \}/, signed);
+  if (!gradle.includes("flower-stand.keystore")) {
+    console.error("Could not sign the Android app with the stable key.");
+    process.exit(1);
+  }
+  writeFileSync(gradlePath, gradle);
+}
+
 console.log("In-app updater is in the Android project.");

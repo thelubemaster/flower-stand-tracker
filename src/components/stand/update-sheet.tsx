@@ -123,7 +123,7 @@ export function UpdateSheet({ open, onOpenChange }: { open: boolean; onOpenChang
                   });
             void job
               .then((message) => setStatus(message))
-              .catch(() => setStatus("Update failed. Check your internet, then try again."))
+              .catch((error: unknown) => setStatus(updateErrorText(error)))
               .finally(() => setBusy(false));
           }}
         >
@@ -154,6 +154,16 @@ export function UpdateSheet({ open, onOpenChange }: { open: boolean; onOpenChang
       </div>
     </Sheet>
   );
+}
+
+function updateErrorText(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "Update failed. Check your internet, then try again.";
 }
 
 function VersionRow({ label, value, tone }: { label: string; value: string; tone: "ok" | "update" | "wait" }) {

@@ -42,7 +42,7 @@ export async function installApkInsideApp(
   try {
     onProgress?.("Downloading the update inside Flower Stand…");
     await ApkInstaller.downloadAndInstall({ url, fileName: APP_APK_NAME });
-    return "Tap Install on the Android screen. Flower Stand stays on the phone, and so does the book.";
+    return "Android's Install screen should be open. Tap Install. The stand stays on the phone.";
   } finally {
     remove();
   }

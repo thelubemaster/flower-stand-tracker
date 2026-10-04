@@ -1,16 +1,15 @@
 package app.flowerstand.book;
 
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
-import android.content.Context;
+import android.app.Activity;
+import android.content.ClipData;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.PackageInstaller;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -28,16 +27,13 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
- * Download the next Flower Stand APK inside the app, then open Android's Install sheet.
- * Does not open a browser.
+ * Download the next Flower Stand APK inside the app, then open Android's Install screen
+ * while the app is still in front. Does not open a browser.
  */
 @CapacitorPlugin(name = "ApkInstaller")
 public class ApkInstallerPlugin extends Plugin {
-    private static final String ACTION_INSTALL_COMPLETE = "app.flowerstand.book.INSTALL_COMPLETE";
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean cancelled = false;
-    private BroadcastReceiver installReceiver;
 
     @PluginMethod
     public void canInstallPackages(PluginCall call) {
@@ -87,27 +83,27 @@ public class ApkInstallerPlugin extends Plugin {
 
         cancelled = false;
         call.setKeepAlive(true);
-        final String fileName = call.getString("fileName", "flower-stand.apk");
         new Thread(() -> {
             try {
                 emit(1, "Downloading the update inside Flower Stand…");
-                File apkFile = downloadToFile(url, fileName);
+                File apkFile = downloadToFile(url);
                 if (cancelled) {
                     call.reject("Cancelled");
                     return;
                 }
-                if (apkFile == null || apkFile.length() < 100_000L) {
+                if (apkFile == null || apkFile.length() < 100_000L || !isZip(apkFile)) {
                     call.reject("Download incomplete. Try again on Wi-Fi.");
                     return;
                 }
-                emit(99, "Opening the Install screen…");
+                emit(99, "Opening Android's Install screen…");
                 mainHandler.post(() -> {
                     try {
-                        installWithPackageInstaller(apkFile);
+                        openSystemInstall(apkFile);
                         JSObject ok = new JSObject();
-                        ok.put("installed", true);
+                        ok.put("installed", false);
+                        ok.put("prompted", true);
                         call.resolve(ok);
-                        emit(100, "Tap Install on the Android screen. The book stays on the phone.");
+                        emit(100, "Tap Install. The stand stays on the phone.");
                     } catch (Exception e) {
                         call.reject("Could not open Install: " + e.getMessage());
                     }
@@ -118,7 +114,7 @@ public class ApkInstallerPlugin extends Plugin {
         }, "flower-stand-apk").start();
     }
 
-    private File downloadToFile(String startUrl, String fileName) throws Exception {
+    private File downloadToFile(String startUrl) throws Exception {
         HttpURLConnection conn = openFollowingRedirects(startUrl);
         try {
             int code = conn.getResponseCode();
@@ -126,7 +122,11 @@ public class ApkInstallerPlugin extends Plugin {
                 throw new IllegalStateException("HTTP " + code);
             }
             long total = conn.getContentLengthLong();
-            File apkFile = new File(getContext().getFilesDir(), fileName);
+            File dir = new File(getContext().getCacheDir(), "updates");
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw new IllegalStateException("Couldn't prepare the update file");
+            }
+            File apkFile = new File(dir, "flower-stand.apk");
             if (apkFile.exists()) apkFile.delete();
             try (InputStream in = new BufferedInputStream(conn.getInputStream(), 256 * 1024);
                     OutputStream out = new FileOutputStream(apkFile)) {
@@ -154,51 +154,26 @@ public class ApkInstallerPlugin extends Plugin {
         }
     }
 
-    private void installWithPackageInstaller(File apk) throws Exception {
-        Context ctx = getContext();
-        PackageInstaller installer = ctx.getPackageManager().getPackageInstaller();
-        PackageInstaller.SessionParams params =
-                new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        params.setAppPackageName(ctx.getPackageName());
-        int sessionId = installer.createSession(params);
-        PackageInstaller.Session session = installer.openSession(sessionId);
-        try (InputStream in = new BufferedInputStream(new FileInputStream(apk));
-                OutputStream out = session.openWrite("package", 0, apk.length())) {
-            byte[] buf = new byte[256 * 1024];
-            int n;
-            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
-            session.fsync(out);
+    /** Open the system installer from the foreground app. A background prompt never appears. */
+    private void openSystemInstall(File apk) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            throw new IllegalStateException("Open Flower Stand, then tap Get up to date again.");
         }
-        registerInstallReceiver();
-        Intent callback = new Intent(ACTION_INSTALL_COMPLETE);
-        callback.setPackage(ctx.getPackageName());
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) flags |= PendingIntent.FLAG_MUTABLE;
-        PendingIntent pending = PendingIntent.getBroadcast(ctx, sessionId, callback, flags);
-        session.commit(pending.getIntentSender());
-        session.close();
+        Uri uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", apk);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.setClipData(ClipData.newRawUri("Flower Stand update", uri));
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        activity.startActivity(intent);
     }
 
-    private void registerInstallReceiver() {
-        if (installReceiver != null) return;
-        installReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
-                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-                    Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
-                    if (confirm != null) {
-                        confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        getContext().startActivity(confirm);
-                    }
-                }
-            }
-        };
-        IntentFilter filter = new IntentFilter(ACTION_INSTALL_COMPLETE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getContext().registerReceiver(installReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            getContext().registerReceiver(installReceiver, filter);
+    private boolean isZip(File file) {
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] magic = new byte[2];
+            return in.read(magic) == 2 && magic[0] == 'P' && magic[1] == 'K';
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -212,7 +187,7 @@ public class ApkInstallerPlugin extends Plugin {
             conn.setConnectTimeout(45_000);
             conn.setReadTimeout(180_000);
             conn.setRequestProperty("Accept", "*/*");
-            conn.setRequestProperty("User-Agent", "FlowerStand-InAppUpdater/1.0");
+            conn.setRequestProperty("User-Agent", "FlowerStand-InAppUpdater/1.1");
             conn.connect();
             int code = conn.getResponseCode();
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
@@ -237,13 +212,6 @@ public class ApkInstallerPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         cancelled = true;
-        if (installReceiver != null) {
-            try {
-                getContext().unregisterReceiver(installReceiver);
-            } catch (Exception ignored) {
-            }
-            installReceiver = null;
-        }
         super.handleOnDestroy();
     }
 }

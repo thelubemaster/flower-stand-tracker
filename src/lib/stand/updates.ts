@@ -147,10 +147,16 @@ export function summaryFor(result: UpdateCheckResult | null): string {
 export function stepsFor(result: UpdateCheckResult | null): string[] {
   if (!result) return ["Look up the latest copy on GitHub."];
   if (result.status === "available") {
-    return [
-      "Get up to date refreshes the Flower Stand already on this phone.",
-      "It does not open the download page. The book stays here.",
-    ];
+    return isNativeAndroidApp()
+      ? [
+          "Get up to date downloads the new copy inside Flower Stand.",
+          "Android then opens the Install screen. Tap Install.",
+          "The stand stays on the phone.",
+        ]
+      : [
+          "Get up to date refreshes the Flower Stand already on this phone.",
+          "It does not open the download page. The book stays here.",
+        ];
   }
   if (result.status === "error") return ["Try again when this phone has a signal."];
   return ["Nothing to install. The book on this phone is already the published copy, or newer."];
