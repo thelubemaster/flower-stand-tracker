@@ -11,6 +11,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  administration: write
 
 concurrency:
   group: pages-release
@@ -70,7 +71,9 @@ jobs:
           java-version: "21"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Install Android packages
         run: |
@@ -121,6 +124,8 @@ jobs:
           path: site
 
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
