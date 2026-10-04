@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { RemovalReason } from "@/lib/stand/types";
+import type { MarkdownReason, RemovalReason } from "@/lib/stand/types";
 
 const moneyFormat = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -42,4 +42,10 @@ export function reasonLabel(reason: RemovalReason): string {
   if (reason === "tossed") return "Tossed";
   if (reason === "counted") return "Counted off";
   return "Dead";
+}
+
+export function markdownReasonLabel(reason: MarkdownReason | "" | undefined): string {
+  if (reason === "too-high") return "Priced too high";
+  if (reason === "season") return "Season's ending";
+  return "";
 }

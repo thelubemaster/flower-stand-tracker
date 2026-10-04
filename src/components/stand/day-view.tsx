@@ -1,22 +1,19 @@
-import { useState } from "react";
-import { formatMoney, formatStamp, itemName, localDay, reasonLabel } from "@/lib/stand/format";
+import { formatMoney, formatStamp, itemName, localDay, markdownReasonLabel, reasonLabel } from "@/lib/stand/format";
 import { activePurchases, askingValue, collectedOnDay, markdownChoices, sameLocalDay } from "@/lib/stand/logic";
 import { useStandStore } from "@/lib/stand/store";
 import { PressButton } from "@/components/stand/ui";
 
 export function DayView({
   onLog,
-  onOtherPrice,
+  onMarkdown,
 }: {
   onLog: () => void;
-  onOtherPrice: (id: string) => void;
+  onMarkdown: (id: string, price: number | null) => void;
 }) {
   const purchases = useStandStore((state) => state.purchases);
   const removals = useStandStore((state) => state.removals);
   const collections = useStandStore((state) => state.collections);
   const priceChanges = useStandStore((state) => state.priceChanges);
-  const setPrice = useStandStore((state) => state.setPrice);
-  const [notice, setNotice] = useState<string | null>(null);
   const day = localDay();
   const sitting = activePurchases(purchases);
   const cameOff = removals
@@ -38,12 +35,6 @@ export function DayView({
           Log money collected
         </PressButton>
       </section>
-
-      {notice ? (
-        <p className="text-sm text-moss" role="status">
-          {notice}
-        </p>
-      ) : null}
 
       <section className="grid gap-3">
         <h2 className="font-display text-2xl">Still sitting</h2>
@@ -67,24 +58,11 @@ export function DayView({
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {choices.map((choice) => (
-                      <PressButton
-                        key={choice}
-                        variant="quiet"
-                        onClick={() => {
-                          const result = setPrice(purchase.id, choice);
-                          setNotice(
-                            result.ok
-                              ? `${itemName(purchase)} is ${formatMoney(choice)} now.`
-                              : "errors" in result && result.errors?.price
-                                ? result.errors.price
-                                : "Couldn't change that price.",
-                          );
-                        }}
-                      >
+                      <PressButton key={choice} variant="quiet" onClick={() => onMarkdown(purchase.id, choice)}>
                         {formatMoney(choice)}
                       </PressButton>
                     ))}
-                    <PressButton variant="quiet" onClick={() => onOtherPrice(purchase.id)}>
+                    <PressButton variant="quiet" onClick={() => onMarkdown(purchase.id, null)}>
                       Other
                     </PressButton>
                   </div>
@@ -121,7 +99,8 @@ export function DayView({
               <li key={change.id} className="rounded-card border border-line bg-card px-4 py-3">
                 <p className="font-medium break-words">{itemName(change)}</p>
                 <p className="text-sm text-muted tabular-nums">
-                  {formatMoney(change.fromPrice)} to {formatMoney(change.toPrice)} · {formatStamp(change.at)}
+                  {formatMoney(change.fromPrice)} to {formatMoney(change.toPrice)}
+                  {markdownReasonLabel(change.reason) ? ` · ${markdownReasonLabel(change.reason)}` : ""} · {formatStamp(change.at)}
                 </p>
               </li>
             ))}

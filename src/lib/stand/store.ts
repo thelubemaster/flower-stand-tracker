@@ -12,7 +12,7 @@ import {
   upgradeRemoval,
 } from "@/lib/stand/logic";
 import type { StandBackup } from "@/lib/stand/backup";
-import type { CashDraft, Collection, CountDraft, PriceChange, Purchase, PurchaseDraft, Removal, TakeOffDraft } from "@/lib/stand/types";
+import type { CashDraft, Collection, CountDraft, MarkdownReason, PriceChange, Purchase, PurchaseDraft, Removal, TakeOffDraft } from "@/lib/stand/types";
 import type { FieldErrors } from "@/lib/stand/logic";
 
 type Result = { ok: true } | { ok: false; errors: FieldErrors } | { ok: false; error: string };
@@ -29,7 +29,7 @@ type StandState = {
   deletePurchase: (id: string) => Result;
   takeOff: (purchaseId: string, draft: TakeOffDraft) => Result;
   updateCount: (purchaseId: string, draft: CountDraft) => Result;
-  setPrice: (purchaseId: string, price: number) => Result;
+  setPrice: (purchaseId: string, price: number, reason: MarkdownReason | "") => Result;
   undoRemoval: (removalId: string) => Result;
   undoPrice: (changeId: string) => Result;
   logCollection: (draft: CashDraft) => Result;
@@ -109,10 +109,10 @@ export const useStandStore = create<StandState>()(
         });
         return { ok: true };
       },
-      setPrice: (purchaseId, price) => {
+      setPrice: (purchaseId, price, reason) => {
         const current = get().purchases.find((purchase) => purchase.id === purchaseId);
         if (!current) return { ok: false, error: "That lot is no longer in the book." };
-        const built = priceChangeFromAmount(current, price, newId());
+        const built = priceChangeFromAmount(current, price, reason, newId());
         if (!built.ok) return built;
         set({
           purchases: get().purchases.map((purchase) => (purchase.id === purchaseId ? built.purchase : purchase)),
@@ -202,7 +202,10 @@ export const useStandStore = create<StandState>()(
           purchases: (data.purchases ?? []).map(upgradePurchase),
           removals: (data.removals ?? []).map(upgradeRemoval),
           collections: data.collections ?? [],
-          priceChanges: Array.isArray(data.priceChanges) ? data.priceChanges : [],
+          priceChanges: (Array.isArray(data.priceChanges) ? data.priceChanges : []).map((change) => ({
+            ...change,
+            reason: change.reason === "too-high" || change.reason === "season" ? change.reason : "",
+          })),
         };
       },
       onRehydrateStorage: () => () => {

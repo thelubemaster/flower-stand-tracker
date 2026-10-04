@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Banknote, ChartColumn, ScrollText, Sprout, Sunset } from "lucide-react";
 import { APP_NAME, APP_VERSION } from "@/lib/version";
-import { formatMoney, formatStamp, itemName, localDay, reasonLabel } from "@/lib/stand/format";
+import { formatMoney, formatStamp, itemName, localDay, markdownReasonLabel, reasonLabel } from "@/lib/stand/format";
 import {
   activePurchases,
   askingValue,
@@ -44,7 +44,7 @@ export function StandApp() {
   const [editId, setEditId] = useState<string | null>(null);
   const [takeId, setTakeId] = useState<string | null>(null);
   const [countId, setCountId] = useState<string | null>(null);
-  const [priceId, setPriceId] = useState<string | null>(null);
+  const [priceTarget, setPriceTarget] = useState<{ id: string; preset: number | null } | null>(null);
   const update = useUpdateStatus(true);
   const behind = updateAvailable(update);
 
@@ -90,10 +90,10 @@ export function StandApp() {
         <main className="flex-1 px-4 pb-28">
           <UpdateBanner result={update} onOpen={() => setAboutOpen(true)} />
           {tab === "stand" ? (
-            <StandView onAdd={() => setBuyOpen(true)} onEdit={setEditId} onTake={setTakeId} onCount={setCountId} onPrice={setPriceId} />
+            <StandView onAdd={() => setBuyOpen(true)} onEdit={setEditId} onTake={setTakeId} onCount={setCountId} onPrice={(id) => setPriceTarget({ id, preset: null })} />
           ) : null}
           {tab === "cash" ? <CashView onLog={() => setCashOpen(true)} /> : null}
-          {tab === "day" ? <DayView onLog={() => setCashOpen(true)} onOtherPrice={setPriceId} /> : null}
+          {tab === "day" ? <DayView onLog={() => setCashOpen(true)} onMarkdown={(id, price) => setPriceTarget({ id, preset: price })} /> : null}
           {tab === "stats" ? (
             <Suspense fallback={<p className="text-sm text-muted">Opening the numbers…</p>}>
               <AnalyticsView />
@@ -120,7 +120,11 @@ export function StandApp() {
       <EditSheet purchaseId={editId} onOpenChange={(open) => { if (!open) setEditId(null); }} />
       <TakeOffSheet purchaseId={takeId} onOpenChange={(open) => { if (!open) setTakeId(null); }} />
       <CountSheet purchaseId={countId} onOpenChange={(open) => { if (!open) setCountId(null); }} />
-      <PriceSheet purchaseId={priceId} onOpenChange={(open) => { if (!open) setPriceId(null); }} />
+      <PriceSheet
+        purchaseId={priceTarget?.id ?? null}
+        preset={priceTarget?.preset ?? null}
+        onOpenChange={(open) => { if (!open) setPriceTarget(null); }}
+      />
     </div>
   );
 }
@@ -192,6 +196,7 @@ function StandView({
   onPrice: (id: string) => void;
 }) {
   const purchases = useStandStore((state) => state.purchases);
+  const priceChanges = useStandStore((state) => state.priceChanges);
   const [label, setLabel] = useState("all");
   const active = activePurchases(purchases);
   const labels = [...new Set(active.map((purchase) => purchase.label))].sort((a, b) => a.localeCompare(b));
@@ -269,6 +274,18 @@ function StandView({
             <p className="mt-3 text-sm">
               Selling for <span className="font-medium tabular-nums">{formatMoney(purchase.sellPrice)}</span> each
             </p>
+            {(() => {
+              const drop = priceChanges
+                .filter((change) => change.purchaseId === purchase.id && change.toPrice < change.fromPrice)
+                .sort((a, b) => b.at.localeCompare(a.at))[0];
+              const why = drop ? markdownReasonLabel(drop.reason) : "";
+              if (!drop || !why || drop.toPrice !== purchase.sellPrice) return null;
+              return (
+                <p className="text-sm text-clay">
+                  Dropped {formatStamp(drop.at)} · {why}
+                </p>
+              );
+            })()}
             <p className="text-sm text-muted">
               Paid {formatMoney(purchase.totalCost)} · {formatMoney(unitCost(purchase))} each
             </p>
@@ -458,6 +475,7 @@ function RecordView() {
             ["bought", "Bought"],
             ["removed", "Removed"],
             ["cash", "Cash"],
+            ["prices", "Prices"],
           ] as const
         ).map(([value, label]) => (
           <Choice key={value} selected={filter === value} onClick={() => setFilter(value)}>
@@ -535,6 +553,9 @@ function RecordView() {
                 <p className="text-sm text-muted tabular-nums">
                   {formatMoney(change.fromPrice)} to {formatMoney(change.toPrice)}
                 </p>
+                {markdownReasonLabel(change.reason) ? (
+                  <p className="text-sm text-clay">{markdownReasonLabel(change.reason)}</p>
+                ) : null}
                 <PressButton
                   variant="ghost"
                   className="mt-2 px-0"

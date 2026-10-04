@@ -172,11 +172,17 @@ export function parseBackup(text: string): { ok: true; backup: StandBackup } | {
     const fromPrice = change ? money(change.fromPrice) : null;
     const toPrice = change ? money(change.toPrice) : null;
     const at = change ? stamp(change.at) : null;
-    if (!id || !purchaseId || !name || label == null || detail == null || fromPrice == null || toPrice == null || fromPrice === toPrice || !at) {
+    const reason =
+      !change || change.reason == null || change.reason === ""
+        ? ""
+        : change.reason === "too-high" || change.reason === "season"
+          ? change.reason
+          : null;
+    if (!id || !purchaseId || !name || label == null || detail == null || fromPrice == null || toPrice == null || fromPrice === toPrice || !at || reason == null) {
       return { ok: false, error: "A price change in this backup doesn't look right." };
     }
     if (!byId.has(purchaseId)) return { ok: false, error: "A price change in this backup doesn't match a buy." };
-    priceChanges.push({ id, purchaseId, name, label, detail, fromPrice, toPrice, at });
+    priceChanges.push({ id, purchaseId, name, label, detail, fromPrice, toPrice, reason, at });
   }
   if (!uniqueIds(priceChanges.map((change) => change.id))) {
     return { ok: false, error: "Two price changes in this backup share an id." };

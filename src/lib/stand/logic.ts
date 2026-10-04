@@ -3,6 +3,7 @@ import type {
   CashDraft,
   Collection,
   CountDraft,
+  MarkdownReason,
   PriceChange,
   Purchase,
   PurchaseDraft,
@@ -456,6 +457,7 @@ export function markdownChoices(price: number): number[] {
 export function priceChangeFromAmount(
   purchase: Purchase,
   toPrice: number,
+  reason: MarkdownReason | "",
   id: string,
   now = new Date(),
 ): { ok: true; purchase: Purchase; change: PriceChange } | { ok: false; errors: FieldErrors } {
@@ -465,6 +467,10 @@ export function priceChangeFromAmount(
   const next = roundMoney(toPrice);
   if (next === purchase.sellPrice) {
     return { ok: false, errors: { price: "That's already the sign price." } };
+  }
+  const dropping = next < purchase.sellPrice;
+  if (dropping && reason !== "too-high" && reason !== "season") {
+    return { ok: false, errors: { reason: "Say if it was priced too high, or the season is ending." } };
   }
   return {
     ok: true,
@@ -477,6 +483,7 @@ export function priceChangeFromAmount(
       detail: purchase.detail,
       fromPrice: purchase.sellPrice,
       toPrice: next,
+      reason: dropping ? reason : "",
       at: now.toISOString(),
     },
   };
@@ -504,7 +511,7 @@ export function draftFromPurchase(purchase: Purchase): PurchaseDraft {
 
 export const REMOVAL_REASONS: RemovalReason[] = ["ran-out", "tossed", "dead"];
 
-export type LedgerFilter = "all" | "bought" | "removed" | "cash";
+export type LedgerFilter = "all" | "bought" | "removed" | "cash" | "prices";
 
 export type LedgerEntry =
   | { type: "bought"; at: string; id: string; purchase: Purchase }
@@ -535,7 +542,7 @@ export function buildLedger(
       rows.push({ type: "cash", at: collection.at, id: `cash-${collection.id}`, collection });
     }
   }
-  if (filter === "all") {
+  if (filter === "all" || filter === "prices") {
     for (const change of priceChanges) {
       rows.push({ type: "price", at: change.at, id: `price-${change.id}`, change });
     }
@@ -596,7 +603,7 @@ export function ledgerCsv(
           change.detail,
           "",
           change.toPrice.toFixed(2),
-          `from ${change.fromPrice.toFixed(2)}`,
+          change.reason ? `from ${change.fromPrice.toFixed(2)} · ${change.reason}` : `from ${change.fromPrice.toFixed(2)}`,
           "",
           change.id,
         ]

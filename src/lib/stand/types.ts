@@ -72,6 +72,8 @@ export type CountDraft = {
   note: string;
 };
 
+export type MarkdownReason = "too-high" | "season";
+
 export type PriceChange = {
   id: string;
   purchaseId: string;
@@ -80,5 +82,6 @@ export type PriceChange = {
   detail: string;
   fromPrice: number;
   toPrice: number;
+  reason: MarkdownReason | "";
   at: string;
 };

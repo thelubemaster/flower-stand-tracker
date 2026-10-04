@@ -4,7 +4,7 @@ import { formatMoney, itemName, localDay } from "@/lib/stand/format";
 import { draftFromPurchase, markdownChoices } from "@/lib/stand/logic";
 import type { FieldErrors } from "@/lib/stand/logic";
 import { useStandStore } from "@/lib/stand/store";
-import type { CashDraft, CountDraft, PartDraft, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
+import type { CashDraft, CountDraft, MarkdownReason, PartDraft, PurchaseDraft, TakeOffDraft } from "@/lib/stand/types";
 import { Choice, Field, PressButton, Sheet, TextControl, AreaControl } from "@/components/stand/ui";
 
 function emptyPurchase(): PurchaseDraft {
@@ -806,31 +806,45 @@ export function CountSheet({
 
 export function PriceSheet({
   purchaseId,
+  preset,
   onOpenChange,
 }: {
   purchaseId: string | null;
+  preset: number | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const purchase = useStandStore((state) => state.purchases.find((row) => row.id === purchaseId));
   const setPrice = useStandStore((state) => state.setPrice);
   const [price, setPriceText] = useState("");
+  const [reason, setReason] = useState<MarkdownReason | "">("");
   const [error, setError] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!purchase) return;
     const choices = markdownChoices(purchase.sellPrice);
-    setPriceText(choices[0] != null ? choices[0].toFixed(2) : "");
+    const starting = preset != null ? preset : choices[0];
+    setPriceText(starting != null ? starting.toFixed(2) : "");
+    setReason("");
     setError(null);
-  }, [purchase]);
+    setReasonError(null);
+  }, [purchase, preset]);
 
   const open = purchaseId != null && purchase != null && purchase.remaining > 0;
   const choices = purchase ? markdownChoices(purchase.sellPrice) : [];
+  const cleaned = price.trim().replace(/[$,\s]/g, "");
+  const parsed = /^\d+(\.\d{0,2})?$/.test(cleaned) ? Number(cleaned) : null;
+  const dropping = purchase != null && parsed != null && parsed < purchase.sellPrice;
 
-  function apply(next: number) {
+  function apply(next: number, why: MarkdownReason | "") {
     if (!purchase) return;
-    const result = setPrice(purchase.id, next);
+    const result = setPrice(purchase.id, next, why);
     if (!result.ok) {
-      setError("errors" in result && result.errors?.price ? result.errors.price : "error" in result ? result.error : "Couldn't change the price.");
+      const priceError = "errors" in result ? result.errors?.price : undefined;
+      const whyError = "errors" in result ? result.errors?.reason : undefined;
+      setError(priceError ?? null);
+      setReasonError(whyError ?? null);
+      if (!priceError && !whyError && "error" in result) setError(result.error);
       return;
     }
     onOpenChange(false);
@@ -841,19 +855,18 @@ export function PriceSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Change the price"
-      description="The old price stays in the record."
+      description="A drop keeps the old price, the day, and why."
     >
       {purchase ? (
         <form
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            const cleaned = price.trim().replace(/[$,\s]/g, "");
-            if (!/^\d+(\.\d{0,2})?$/.test(cleaned)) {
+            if (parsed == null) {
               setError("Enter the new price, like 3 or 3.50.");
               return;
             }
-            apply(Number(cleaned));
+            apply(parsed, dropping ? reason : "");
           }}
         >
           <p className="text-sm text-pretty text-muted">
@@ -863,9 +876,9 @@ export function PriceSheet({
           {choices.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
               {choices.map((choice) => (
-                <PressButton key={choice} variant="quiet" onClick={() => apply(choice)}>
+                <Choice key={choice} selected={parsed === choice} onClick={() => { setPriceText(choice.toFixed(2)); setError(null); }}>
                   {formatMoney(choice)}
-                </PressButton>
+                </Choice>
               ))}
             </div>
           ) : null}
@@ -879,8 +892,30 @@ export function PriceSheet({
               }}
             />
           </Field>
+          {dropping ? (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium">Why drop it</legend>
+              <div className="grid gap-2">
+                <Choice selected={reason === "too-high"} onClick={() => { setReason("too-high"); setReasonError(null); }}>
+                  Priced too high
+                </Choice>
+                <Choice selected={reason === "season"} onClick={() => { setReason("season"); setReasonError(null); }}>
+                  Season's ending
+                </Choice>
+              </div>
+              {reasonError ? (
+                <p className="mt-2 text-sm text-clay" role="alert">
+                  {reasonError}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-pretty text-muted">
+                  Too high means the sign was wrong. Season's ending means you're clearing them out.
+                </p>
+              )}
+            </fieldset>
+          ) : null}
           <PressButton type="submit" className="w-full">
-            Set this price
+            {dropping ? "Drop the price" : "Set this price"}
           </PressButton>
         </form>
       ) : null}

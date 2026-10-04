@@ -41,9 +41,12 @@ test("backup round trip keeps the book", () => {
   const counted = countFromDraft(mum, { mode: "left", amount: "3", day: "2026-10-03", note: "" }, "r1", new Date("2026-10-03T20:00:00.000Z"));
   assert.equal(counted.ok, true);
   if (!counted.ok) return;
-  const priced = priceChangeFromAmount(counted.purchase, 3, "c1", new Date("2026-10-03T21:00:00.000Z"));
+  const priced = priceChangeFromAmount(counted.purchase, 3, "season", "c1", new Date("2026-10-03T21:00:00.000Z"));
   assert.equal(priced.ok, true);
   if (!priced.ok) return;
+  assert.equal(priced.change.reason, "season");
+  const refused = priceChangeFromAmount(counted.purchase, 3, "", "c2");
+  assert.equal(refused.ok, false);
   const backup = buildBackup([priced.purchase], [counted.removal], [], [priced.change], "1.7.0");
   const parsed = parseBackup(JSON.stringify(backup));
   assert.equal(parsed.ok, true);
