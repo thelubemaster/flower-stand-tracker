@@ -27,6 +27,7 @@ import { UpdateBanner, UpdateSheet, useUpdateStatus } from "@/components/stand/u
 import { isUpdateArrival, updateAvailable } from "@/lib/stand/updates";
 import { Logo } from "@/components/stand/logo";
 import { DayView } from "@/components/stand/day-view";
+import { GroupHistory } from "@/components/stand/group-history";
 import { Choice, PressButton, Sheet } from "@/components/stand/ui";
 
 const AnalyticsView = lazy(() =>
@@ -209,10 +210,14 @@ function StandView({
   const collections = useStandStore((state) => state.collections);
   const priceChanges = useStandStore((state) => state.priceChanges);
   const [label, setLabel] = useState("all");
+  const [historyLabel, setHistoryLabel] = useState<string | null>(null);
   const sample = isSampleStand(purchases, removals, collections, priceChanges);
   const active = activePurchases(purchases);
-  const labels = [...new Set(active.map((purchase) => purchase.label))].sort((a, b) => a.localeCompare(b));
-  const shown = label === "all" ? active : active.filter((purchase) => purchase.label === label);
+  const groupOf = (purchase: { label: string }) => purchase.label.trim() || "Other";
+  const allLabels = [...new Set(purchases.map(groupOf))].sort((a, b) => a.localeCompare(b));
+  const shown = label === "all" ? active : active.filter((purchase) => groupOf(purchase) === label);
+  const shownLabels = label === "all" ? [...new Set(shown.map(groupOf))].sort((a, b) => a.localeCompare(b)) : [label];
+  const resting = allLabels.filter((option) => !active.some((purchase) => groupOf(purchase) === option));
   const cleared = clearedCount(purchases);
 
   return (
@@ -244,13 +249,13 @@ function StandView({
           </div>
         </section>
       ) : null}
-      {active.length > 0 ? (
+      {allLabels.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           <Choice selected={label === "all"} onClick={() => setLabel("all")}>
             All {active.length}
           </Choice>
-          {labels.map((option) => {
-            const count = active.filter((purchase) => purchase.label === option).length;
+          {allLabels.map((option) => {
+            const count = active.filter((purchase) => groupOf(purchase) === option).length;
             return (
               <Choice key={option} selected={label === option} onClick={() => setLabel(option)}>
                 {option} {count}
@@ -270,72 +275,116 @@ function StandView({
           </div>
         </section>
       ) : null}
-      {active.length > 0 && shown.length === 0 ? (
-        <p className="text-sm text-muted">None of those are on the stand right now.</p>
-      ) : null}
-      <ul className="grid gap-3">
-        {shown.map((purchase) => (
-          <li key={purchase.id} className="rounded-card border border-line bg-card p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm text-muted">{purchase.label}</p>
-                <h2 className="font-display text-2xl leading-tight text-balance break-words">
-                  {purchase.detail || purchase.name}
-                </h2>
-                {purchase.detail ? <p className="text-sm text-muted">{purchase.name}</p> : null}
-              </div>
-              <p className="font-display text-4xl tabular-nums leading-none">{purchase.remaining}</p>
-            </div>
-            <p className="mt-2 text-sm text-muted">
-              of {purchase.quantity} bought · {formatStamp(purchase.at)}
-            </p>
-            {purchases.filter((row) => row.lotId === purchase.lotId).length > 1 ? (
-              <p className="text-sm text-muted">
-                Part of{" "}
-                {purchases.filter((row) => row.lotId === purchase.lotId).reduce((sum, row) => sum + row.quantity, 0)}{" "}
-                {purchase.name}
-              </p>
-            ) : null}
-            <p className="mt-3 text-sm">
-              Selling for <span className="font-medium tabular-nums">{formatMoney(purchase.sellPrice)}</span> each
-            </p>
-            {(() => {
-              const drop = priceChanges
-                .filter((change) => change.purchaseId === purchase.id && change.toPrice < change.fromPrice)
-                .sort((a, b) => b.at.localeCompare(a.at))[0];
-              const why = drop ? markdownReasonLabel(drop.reason) : "";
-              if (!drop || !why || drop.toPrice !== purchase.sellPrice) return null;
-              return (
-                <p className="text-sm text-clay">
-                  Dropped {formatStamp(drop.at)} · {why}
+      {shownLabels.map((groupLabel) => {
+        const cards = shown.filter((purchase) => groupOf(purchase) === groupLabel);
+        if (cards.length === 0 && label === "all") return null;
+        const bought = purchases.filter((purchase) => groupOf(purchase) === groupLabel);
+        const still = bought.reduce((sum, purchase) => sum + purchase.remaining, 0);
+        return (
+          <section key={groupLabel} className="grid gap-3">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="font-display text-2xl leading-none">{groupLabel}</h2>
+                <p className="mt-1 text-sm text-muted">
+                  {still} still out of {bought.reduce((sum, purchase) => sum + purchase.quantity, 0)} bought
                 </p>
-              );
-            })()}
-            <p className="text-sm text-muted">
-              Paid {formatMoney(purchase.totalCost)} · {formatMoney(unitCost(purchase))} each
-            </p>
-            {purchase.note ? <p className="mt-2 text-sm text-pretty text-muted">{purchase.note}</p> : null}
-            <div className="mt-4 grid gap-2">
-              {purchase.remaining > 1 ? (
-                <PressButton className="w-full" onClick={() => onCount(purchase.id)}>
-                  Update the count
-                </PressButton>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                <PressButton variant={purchase.remaining > 1 ? "quiet" : "primary"} onClick={() => onTake(purchase.id)}>
-                  Take off
-                </PressButton>
-                <PressButton variant="quiet" onClick={() => onPrice(purchase.id)}>
-                  Change price
-                </PressButton>
               </div>
-              <PressButton variant="ghost" className="w-full" onClick={() => onEdit(purchase.id)}>
-                Fix this lot
+              <PressButton variant="quiet" onClick={() => setHistoryLabel(groupLabel)}>
+                History
               </PressButton>
             </div>
-          </li>
-        ))}
-      </ul>
+            {cards.length === 0 ? (
+              <p className="text-sm text-muted">None of those are on the stand right now.</p>
+            ) : (
+              <ul className="grid gap-3">
+                {cards.map((purchase) => (
+                  <li key={purchase.id} className="rounded-card border border-line bg-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-display text-2xl leading-tight text-balance break-words">
+                          {purchase.detail || purchase.name}
+                        </h3>
+                        {purchase.detail ? <p className="text-sm text-muted">{purchase.name}</p> : null}
+                      </div>
+                      <p className="font-display text-4xl tabular-nums leading-none">{purchase.remaining}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">
+                      of {purchase.quantity} bought · {formatStamp(purchase.at)}
+                    </p>
+                    {purchases.filter((row) => row.lotId === purchase.lotId).length > 1 ? (
+                      <p className="text-sm text-muted">
+                        Part of{" "}
+                        {purchases.filter((row) => row.lotId === purchase.lotId).reduce((sum, row) => sum + row.quantity, 0)}{" "}
+                        {purchase.name}
+                      </p>
+                    ) : null}
+                    <p className="mt-3 text-sm">
+                      Selling for <span className="font-medium tabular-nums">{formatMoney(purchase.sellPrice)}</span> each
+                    </p>
+                    {(() => {
+                      const drop = priceChanges
+                        .filter((change) => change.purchaseId === purchase.id && change.toPrice < change.fromPrice)
+                        .sort((a, b) => b.at.localeCompare(a.at))[0];
+                      const why = drop ? markdownReasonLabel(drop.reason) : "";
+                      if (!drop || !why || drop.toPrice !== purchase.sellPrice) return null;
+                      return (
+                        <p className="text-sm text-clay">
+                          Dropped {formatStamp(drop.at)} · {why}
+                        </p>
+                      );
+                    })()}
+                    <p className="text-sm text-muted">
+                      Paid {formatMoney(purchase.totalCost)} · {formatMoney(unitCost(purchase))} each
+                    </p>
+                    {purchase.note ? <p className="mt-2 text-sm text-pretty text-muted">{purchase.note}</p> : null}
+                    <div className="mt-4 grid gap-2">
+                      {purchase.remaining > 1 ? (
+                        <PressButton className="w-full" onClick={() => onCount(purchase.id)}>
+                          Update the count
+                        </PressButton>
+                      ) : null}
+                      <div className="grid grid-cols-2 gap-2">
+                        <PressButton variant={purchase.remaining > 1 ? "quiet" : "primary"} onClick={() => onTake(purchase.id)}>
+                          Take off
+                        </PressButton>
+                        <PressButton variant="quiet" onClick={() => onPrice(purchase.id)}>
+                          Change price
+                        </PressButton>
+                      </div>
+                      <PressButton variant="ghost" className="w-full" onClick={() => onEdit(purchase.id)}>
+                        Fix this lot
+                      </PressButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+      {label === "all" && resting.length > 0 ? (
+        <section className="grid gap-2">
+          <h2 className="font-display text-2xl">Nothing left out</h2>
+          {resting.map((groupLabel) => (
+            <div key={groupLabel} className="flex items-center justify-between gap-3">
+              <p className="text-sm">{groupLabel}</p>
+              <PressButton variant="quiet" onClick={() => setHistoryLabel(groupLabel)}>
+                History
+              </PressButton>
+            </div>
+          ))}
+        </section>
+      ) : null}
+      <Sheet
+        open={historyLabel != null}
+        onOpenChange={(open) => {
+          if (!open) setHistoryLabel(null);
+        }}
+        title={historyLabel ?? "History"}
+        description="Every date you added one, and what happened after. Sold out, tossed, and dead stay here."
+      >
+        {historyLabel ? <GroupHistory label={historyLabel} /> : null}
+      </Sheet>
       {cleared > 0 ? (
         <p className="text-sm text-pretty text-muted">
           {cleared === 1 ? "1 lot is off the stand." : `${cleared} lots are off the stand.`} They’re still in the record.
@@ -516,10 +565,10 @@ function RecordView() {
   const undoPrice = useStandStore((state) => state.undoPrice);
   const replaceBook = useStandStore((state) => state.replaceBook);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [filter, setFilter] = useState<LedgerFilter>("all");
+  const [filter, setFilter] = useState<LedgerFilter | "groups">("groups");
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingBackup, setPendingBackup] = useState<StandBackup | null>(null);
-  const rows = buildLedger(purchases, removals, collections, filter, priceChanges);
+  const rows = filter === "groups" ? [] : buildLedger(purchases, removals, collections, filter, priceChanges);
   const empty = purchases.length + removals.length + collections.length + priceChanges.length === 0;
 
   return (
@@ -586,6 +635,7 @@ function RecordView() {
       <div className="flex flex-wrap gap-2">
         {(
           [
+            ["groups", "Groups"],
             ["all", "All"],
             ["bought", "Bought"],
             ["removed", "Removed"],
@@ -611,7 +661,9 @@ function RecordView() {
           </p>
         </section>
       ) : null}
-      {!empty && rows.length === 0 ? <p className="text-sm text-muted">Nothing in this part of the record.</p> : null}
+      {filter === "groups" && !empty ? <GroupHistory /> : null}
+      {filter !== "groups" && !empty && rows.length === 0 ? <p className="text-sm text-muted">Nothing in this part of the record.</p> : null}
+      {filter !== "groups" ? (
       <ul className="grid gap-2">
         {rows.map((row) => {
           if (row.type === "bought") {
@@ -694,6 +746,7 @@ function RecordView() {
           );
         })}
       </ul>
+      ) : null}
       <Sheet
         open={pendingBackup != null}
         onOpenChange={(open) => {

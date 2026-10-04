@@ -1,6 +1,6 @@
 {
-  "version": "1.9.3",
-  "apkVersion": "1.9.3",
-  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.9.3/flower-stand.apk",
-  "notes": "The sample stand is a full month."
+  "version": "1.9.4",
+  "apkVersion": "1.9.4",
+  "apkUrl": "https://github.com/thelubemaster/flower-stand-tracker/releases/download/v1.9.4/flower-stand.apk",
+  "notes": "Each kind of item has its own history."
 }
